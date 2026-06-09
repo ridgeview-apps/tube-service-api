@@ -1,7 +1,8 @@
-# Tube Service History API
+# Tube Service API
 
-A FastAPI service that records TfL Tube line-status snapshots and exposes them
-by London calendar day.
+A FastAPI service that extends TfL data for the Tube Service mobile app. Its
+first feature records line-status snapshots and exposes them by London calendar
+day.
 
 ## Architecture
 
@@ -40,13 +41,13 @@ uv run uvicorn app.main:app --reload
 In another terminal, start the collector:
 
 ```bash
-uv run python -m app.collector
+uv run python -m app.workers.line_status_collector
 ```
 
 Run a single collection for a quick check:
 
 ```bash
-uv run python -m app.collector --once
+uv run python -m app.workers.line_status_collector --once
 ```
 
 Open:
@@ -94,7 +95,7 @@ Choose a host that supports:
 - One continuously running worker using:
 
 ```bash
-python -m app.collector
+python -m app.workers.line_status_collector
 ```
 
 Set the same `DATABASE_URL` and `TFL_API_KEY` on both services. The API is

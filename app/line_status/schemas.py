@@ -3,10 +3,6 @@ from datetime import UTC, date, datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
-class HealthResponse(BaseModel):
-    status: str
-
-
 class SnapshotResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

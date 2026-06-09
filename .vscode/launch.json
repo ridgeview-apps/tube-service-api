@@ -16,8 +16,7 @@
       "name": "Collector",
       "type": "debugpy",
       "request": "launch",
-      "module": "app.collector"
+      "module": "app.workers.line_status_collector"
     }
   ]
 }
-

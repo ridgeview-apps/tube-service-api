@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import LineStatusSnapshot
+from app.line_status.models import LineStatusSnapshot
 
 
 async def get_line_snapshots(

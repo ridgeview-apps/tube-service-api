@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import router
+from app.api.router import router
 from app.database import create_tables
 
 
@@ -14,7 +14,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="Tube Service History API",
+    title="Tube Service API",
     version="0.1.0",
     lifespan=lifespan,
 )

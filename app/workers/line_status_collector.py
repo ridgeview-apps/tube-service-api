@@ -3,10 +3,10 @@ import logging
 import sys
 from datetime import UTC, datetime
 
+from app.clients.tfl import TflClient
 from app.config import get_settings
 from app.database import create_tables, session_factory
-from app.models import LineStatusSnapshot
-from app.services.tfl import TflClient
+from app.line_status.models import LineStatusSnapshot
 
 logging.basicConfig(
     level=logging.INFO,

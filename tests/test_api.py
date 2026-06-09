@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_session
+from app.line_status.models import LineStatusSnapshot
 from app.main import app
-from app.models import LineStatusSnapshot
 
 test_engine = create_async_engine(
     "sqlite+aiosqlite://",
