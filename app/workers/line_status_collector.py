@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def collect_once(client: TflClient) -> int:
     observed_at = datetime.now(UTC)
-    statuses = await client.get_tube_line_statuses()
+    statuses = await client.get_rail_line_statuses()
 
     async with session_factory() as session:
         session.add_all(
