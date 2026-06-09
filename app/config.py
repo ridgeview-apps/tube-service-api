@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./tube_service.db"
     tfl_api_key: str | None = None
-    poll_interval_seconds: int = Field(default=60, ge=30)
+    poll_interval_seconds: int = Field(default=600, ge=30)
 
 
 @lru_cache

@@ -9,8 +9,8 @@ day.
 There are three deliberately separate parts:
 
 - **API:** serves saved data to the mobile app.
-- **Collector:** polls TfL once per minute and writes one snapshot per rail line
-  across Tube, Elizabeth line, DLR, London Overground, and Trams.
+- **Collector:** polls TfL once every 10 minutes and writes one snapshot per
+  rail line across Tube, Elizabeth line, DLR, London Overground, and Trams.
 - **Database:** SQLite locally; use PostgreSQL when deployed.
 
 Run the API and collector as separate processes in production. This prevents
