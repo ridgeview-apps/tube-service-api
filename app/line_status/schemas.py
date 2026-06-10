@@ -3,16 +3,22 @@ from datetime import UTC, date, datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
-class SnapshotResponse(BaseModel):
+class LineStatusRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status_severity: int
+    status_description: str
+    reason: str | None
+
+
+class LineStatusSnapshotRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     line_id: str
     line_name: str
     mode_name: str
-    status_severity: int
-    status_description: str
-    reason: str | None
     observed_at: datetime
+    statuses: list[LineStatusRead]
 
     @field_validator("observed_at", mode="after")
     @classmethod
@@ -20,8 +26,8 @@ class SnapshotResponse(BaseModel):
         return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
-class DailyHistoryResponse(BaseModel):
+class DailyHistoryRead(BaseModel):
     line_id: str
     date: date
     timezone: str
-    snapshots: list[SnapshotResponse]
+    snapshots: list[LineStatusSnapshotRead]

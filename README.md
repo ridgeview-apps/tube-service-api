@@ -1,20 +1,25 @@
 # Tube Service API
 
 A FastAPI service that extends TfL data for the Tube Service mobile app. Its
-first feature records line-status snapshots and exposes them by London calendar
-day.
+first feature records line-status snapshots and exposes them by London
+calendar day.
 
 ## Architecture
 
 There are three deliberately separate parts:
 
 - **API:** serves saved data to the mobile app.
-- **Collector:** polls TfL once every 10 minutes and writes one snapshot per
-  rail line across Tube, Elizabeth line, DLR, London Overground, and Trams.
+- **Collector:** polls TfL once every 10 minutes and writes a snapshot only
+  when a rail line's status changes. Each snapshot contains its complete
+  status list. It covers Tube, Elizabeth line, DLR, London Overground, and
+  Trams.
 - **Database:** SQLite locally; use PostgreSQL when deployed.
 
 Run the API and collector as separate processes in production. This prevents
 multiple web workers from accidentally polling and saving duplicate data.
+The first collection of each London day stores a baseline for every line.
+Later collections store only changes, so daily history is a simple date-range
+query.
 
 ## Prerequisites
 

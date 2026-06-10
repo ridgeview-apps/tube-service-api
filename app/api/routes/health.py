@@ -4,10 +4,10 @@ from pydantic import BaseModel
 router = APIRouter(tags=["system"])
 
 
-class HealthResponse(BaseModel):
+class HealthRead(BaseModel):
     status: str
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+@router.get("/health", response_model=HealthRead)
+async def health() -> HealthRead:
+    return HealthRead(status="ok")

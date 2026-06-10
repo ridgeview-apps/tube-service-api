@@ -1,12 +1,52 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.line_status.models import LineStatusSnapshot
 
 
-async def get_line_snapshots(
+async def get_latest_line_states(
+    session: AsyncSession,
+    line_ids: list[str],
+    start: datetime,
+    end: datetime,
+) -> dict[str, LineStatusSnapshot]:
+    if not line_ids:
+        return {}
+
+    latest_snapshots = (
+        select(
+            LineStatusSnapshot.line_id,
+            func.max(LineStatusSnapshot.observed_at).label("observed_at"),
+        )
+        .where(
+            LineStatusSnapshot.line_id.in_(line_ids),
+            LineStatusSnapshot.observed_at >= start,
+            LineStatusSnapshot.observed_at < end,
+        )
+        .group_by(LineStatusSnapshot.line_id)
+        .subquery()
+    )
+
+    statement = (
+        select(LineStatusSnapshot)
+        .join(
+            latest_snapshots,
+            and_(
+                LineStatusSnapshot.line_id == latest_snapshots.c.line_id,
+                LineStatusSnapshot.observed_at == latest_snapshots.c.observed_at,
+            ),
+        )
+        .options(selectinload(LineStatusSnapshot.statuses))
+    )
+
+    snapshots = (await session.scalars(statement)).all()
+    return {snapshot.line_id: snapshot for snapshot in snapshots}
+
+
+async def get_line_history(
     session: AsyncSession,
     line_id: str,
     start: datetime,
@@ -19,6 +59,7 @@ async def get_line_snapshots(
             LineStatusSnapshot.observed_at >= start,
             LineStatusSnapshot.observed_at < end,
         )
+        .options(selectinload(LineStatusSnapshot.statuses))
         .order_by(LineStatusSnapshot.observed_at)
     )
     return list((await session.scalars(statement)).all())

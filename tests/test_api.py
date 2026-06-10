@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_session
-from app.line_status.models import LineStatusSnapshot
+from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.main import app
 
 test_engine = create_async_engine(
@@ -50,19 +50,27 @@ async def test_history_returns_only_requested_london_day() -> None:
                     line_id="victoria",
                     line_name="Victoria",
                     mode_name="tube",
-                    status_severity=10,
-                    status_description="Good Service",
-                    reason=None,
                     observed_at=datetime(2026, 6, 8, 22, 59, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=10,
+                            status_description="Good Service",
+                            reason=None,
+                        )
+                    ],
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
                     line_name="Victoria",
                     mode_name="tube",
-                    status_severity=6,
-                    status_description="Severe Delays",
-                    reason="Test disruption",
                     observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=6,
+                            status_description="Severe Delays",
+                            reason="Test disruption",
+                        )
+                    ],
                 ),
             ]
         )
@@ -81,5 +89,5 @@ async def test_history_returns_only_requested_london_day() -> None:
     body = response.json()
     assert body["date"] == "2026-06-09"
     assert len(body["snapshots"]) == 1
-    assert body["snapshots"][0]["status_description"] == "Severe Delays"
+    assert body["snapshots"][0]["statuses"][0]["status_description"] == "Severe Delays"
     assert body["snapshots"][0]["observed_at"].endswith("Z")

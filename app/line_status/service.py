@@ -1,30 +1,27 @@
-from datetime import UTC, date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.line_status.repository import get_line_snapshots
-from app.line_status.schemas import DailyHistoryResponse
-
-LONDON = ZoneInfo("Europe/London")
+from app.line_status.repository import get_line_history
+from app.line_status.schemas import DailyHistoryRead
+from app.line_status.time import LONDON, london_day_bounds_utc
 
 
 async def get_daily_history(
     session: AsyncSession,
     line_id: str,
     day: date,
-) -> DailyHistoryResponse:
+) -> DailyHistoryRead:
     normalized_line_id = line_id.lower()
-    local_start = datetime.combine(day, time.min, tzinfo=LONDON)
-    local_end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LONDON)
+    start, end = london_day_bounds_utc(day)
 
-    snapshots = await get_line_snapshots(
+    snapshots = await get_line_history(
         session=session,
         line_id=normalized_line_id,
-        start=local_start.astimezone(UTC),
-        end=local_end.astimezone(UTC),
+        start=start,
+        end=end,
     )
-    return DailyHistoryResponse(
+    return DailyHistoryRead(
         line_id=normalized_line_id,
         date=day,
         timezone=str(LONDON),
