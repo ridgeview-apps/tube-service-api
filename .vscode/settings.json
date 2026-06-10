@@ -9,8 +9,7 @@
     "**/*.pyc": true,
     ".pytest_cache": true,
     ".ruff_cache": true,
-    ".venv": true,
-    "tube_service.db": true
+    ".venv": true
   },
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   "python.testing.pytestEnabled": true,
