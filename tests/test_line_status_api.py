@@ -53,6 +53,19 @@ async def test_history_returns_only_requested_london_day() -> None:
                     line_id="victoria",
                     line_name="Victoria",
                     mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=10,
+                            status_description="Good Service",
+                            reason=None,
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="victoria",
+                    line_name="Victoria",
+                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -78,8 +91,9 @@ async def test_history_returns_only_requested_london_day() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["date"] == "2026-06-09"
-    assert len(body["snapshots"]) == 1
+    assert len(body["snapshots"]) == 2
     assert body["snapshots"][0]["statuses"][0]["status_description"] == "Severe Delays"
+    assert body["snapshots"][1]["statuses"][0]["status_description"] == "Good Service"
     assert body["snapshots"][0]["observed_at"].endswith("Z")
 
 

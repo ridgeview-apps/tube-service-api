@@ -60,6 +60,6 @@ async def get_line_history(
             LineStatusSnapshot.observed_at < end,
         )
         .options(selectinload(LineStatusSnapshot.statuses))
-        .order_by(LineStatusSnapshot.observed_at)
+        .order_by(LineStatusSnapshot.observed_at.desc())
     )
     return list((await session.scalars(statement)).all())
