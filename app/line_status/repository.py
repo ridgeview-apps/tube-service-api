@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.line_status.models import LineStatusSnapshot
 
 
-async def get_latest_line_states(
+async def get_latest_snapshots_by_line(
     session: AsyncSession,
     line_ids: list[str],
     start: datetime,

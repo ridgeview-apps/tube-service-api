@@ -10,7 +10,7 @@ def mock_client(response_json: list[dict]) -> TflClient:
     return TflClient(transport=httpx.MockTransport(handler))
 
 
-async def test_get_rail_lines_requests_all_supported_modes() -> None:
+async def test_get_rail_line_statuses_requests_all_supported_modes() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         requested_modes = request.url.path.split("/")[3].split(",")
         assert requested_modes == list(TFL_RAIL_MODES)
@@ -19,12 +19,12 @@ async def test_get_rail_lines_requests_all_supported_modes() -> None:
 
     client = TflClient(transport=httpx.MockTransport(handler))
     try:
-        await client.get_rail_lines()
+        await client.get_rail_line_statuses()
     finally:
         await client.close()
 
 
-async def test_get_rail_lines_parses_line_and_status_fields() -> None:
+async def test_get_rail_line_statuses_parses_line_and_status_fields() -> None:
     client = mock_client(
         [
             {
@@ -43,7 +43,7 @@ async def test_get_rail_lines_parses_line_and_status_fields() -> None:
     )
 
     try:
-        lines = await client.get_rail_lines()
+        lines = await client.get_rail_line_statuses()
     finally:
         await client.close()
 
@@ -57,7 +57,7 @@ async def test_get_rail_lines_parses_line_and_status_fields() -> None:
     assert lines[0].statuses[0].reason == "Signal failure"
 
 
-async def test_get_rail_lines_normalizes_and_deduplicates_statuses() -> None:
+async def test_get_rail_line_statuses_normalizes_and_deduplicates_statuses() -> None:
     client = mock_client(
         [
             {
@@ -85,7 +85,7 @@ async def test_get_rail_lines_normalizes_and_deduplicates_statuses() -> None:
     )
 
     try:
-        lines = await client.get_rail_lines()
+        lines = await client.get_rail_line_statuses()
     finally:
         await client.close()
 

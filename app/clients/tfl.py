@@ -37,7 +37,7 @@ class TflClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def get_rail_lines(self) -> list[TflLine]:
+    async def get_rail_line_statuses(self) -> list[TflLine]:
         modes = ",".join(TFL_RAIL_MODES)
         response = await self._client.get(f"/Line/Mode/{modes}/Status")
         response.raise_for_status()

@@ -10,7 +10,7 @@ from app.clients.tfl import TflClient, TflLine, TflLineStatus
 from app.config import get_settings
 from app.database import create_tables, session_factory
 from app.line_status.models import LineStatus, LineStatusSnapshot
-from app.line_status.repository import get_latest_line_states
+from app.line_status.repository import get_latest_snapshots_by_line
 from app.line_status.time import LONDON, london_day_bounds_utc
 
 logging.basicConfig(
@@ -55,21 +55,21 @@ async def capture_snapshots_once(
     now: Callable[[], datetime] = utc_now,
 ) -> int:
     observed_at = now()
-    remote_lines = await client.get_rail_lines()
-    london_date = observed_at.astimezone(LONDON).date()
-    day_start_utc, day_end_utc = london_day_bounds_utc(london_date)
+    remote_lines = await client.get_rail_line_statuses()
+    today_in_london = observed_at.astimezone(LONDON).date()
+    today_start_utc, tomorrow_start_utc = london_day_bounds_utc(today_in_london)
 
     async with sessions() as session:
-        local_states_by_line = await get_latest_line_states(
+        latest_snapshots_by_line = await get_latest_snapshots_by_line(
             session=session,
             line_ids=[line.id for line in remote_lines],
-            start=day_start_utc,
-            end=day_end_utc,
+            start=today_start_utc,
+            end=tomorrow_start_utc,
         )
         snapshots_to_store: list[LineStatusSnapshot] = []
 
         for remote_line in remote_lines:
-            latest_local_snapshot = local_states_by_line.get(remote_line.id)
+            latest_local_snapshot = latest_snapshots_by_line.get(remote_line.id)
             if snapshot_changed(remote_line, latest_local_snapshot):
                 snapshots_to_store.append(create_snapshot(remote_line, observed_at))
 

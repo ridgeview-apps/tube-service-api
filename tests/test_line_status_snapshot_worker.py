@@ -21,7 +21,7 @@ class FakeTflClient:
     def __init__(self, lines: list[TflLine]) -> None:
         self.lines = lines
 
-    async def get_rail_lines(self) -> list[TflLine]:
+    async def get_rail_line_statuses(self) -> list[TflLine]:
         return self.lines
 
 
