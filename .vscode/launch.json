@@ -13,10 +13,10 @@
       "jinja": true
     },
     {
-      "name": "Collector",
+      "name": "Snapshot Worker",
       "type": "debugpy",
       "request": "launch",
-      "module": "app.workers.line_status_collector"
+      "module": "app.workers.line_status_snapshot_worker"
     }
   ]
 }

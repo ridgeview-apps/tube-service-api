@@ -35,7 +35,7 @@ async def run(*, once: bool = False) -> None:
     try:
         while True:
             try:
-                stored_snapshot_count = await collect_once(client)
+                stored_snapshot_count = await capture_snapshots_once(client)
                 logger.info("Stored %s line status snapshots", stored_snapshot_count)
             except Exception:
                 logger.exception("TfL status collection failed")
@@ -48,7 +48,7 @@ async def run(*, once: bool = False) -> None:
         await client.close()
 
 
-async def collect_once(
+async def capture_snapshots_once(
     client: TflClient,
     *,
     sessions: async_sessionmaker[AsyncSession] = session_factory,

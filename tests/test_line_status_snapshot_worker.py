@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.clients.tfl import TflLine, TflLineStatus
 from app.database import Base
 from app.line_status.models import LineStatus, LineStatusSnapshot
-from app.workers.line_status_collector import collect_once
+from app.workers.line_status_snapshot_worker import capture_snapshots_once
 
 test_engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -63,15 +63,15 @@ async def stored_status_count() -> int:
     return count or 0
 
 
-async def test_collect_once_only_stores_changed_lines() -> None:
+async def test_capture_snapshots_once_only_stores_changed_lines() -> None:
     client = FakeTflClient([line("victoria"), line("central")])
 
-    first_count = await collect_once(
+    first_count = await capture_snapshots_once(
         client,
         sessions=db_session_factory,
         now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
     )
-    unchanged_count = await collect_once(
+    unchanged_count = await capture_snapshots_once(
         client,
         sessions=db_session_factory,
         now=lambda: datetime(2026, 6, 9, 8, 10, tzinfo=UTC),
@@ -81,7 +81,7 @@ async def test_collect_once_only_stores_changed_lines() -> None:
         line("victoria", "Severe Delays", "Test disruption"),
         line("central"),
     ]
-    changed_count = await collect_once(
+    changed_count = await capture_snapshots_once(
         client,
         sessions=db_session_factory,
         now=lambda: datetime(2026, 6, 9, 8, 20, tzinfo=UTC),
@@ -114,9 +114,9 @@ async def test_status_order_does_not_count_as_a_change() -> None:
     )
     client = FakeTflClient([district])
 
-    first_count = await collect_once(client, sessions=db_session_factory)
+    first_count = await capture_snapshots_once(client, sessions=db_session_factory)
     district.statuses.reverse()
-    reordered_count = await collect_once(client, sessions=db_session_factory)
+    reordered_count = await capture_snapshots_once(client, sessions=db_session_factory)
 
     assert first_count == 1
     assert reordered_count == 0
@@ -127,17 +127,17 @@ async def test_status_order_does_not_count_as_a_change() -> None:
 async def test_first_collection_of_new_london_day_stores_baseline() -> None:
     client = FakeTflClient([line("victoria")])
 
-    previous_day_count = await collect_once(
+    previous_day_count = await capture_snapshots_once(
         client,
         sessions=db_session_factory,
         now=lambda: datetime(2026, 6, 8, 22, 50, tzinfo=UTC),
     )
-    new_day_count = await collect_once(
+    new_day_count = await capture_snapshots_once(
         client,
         sessions=db_session_factory,
         now=lambda: datetime(2026, 6, 8, 23, 10, tzinfo=UTC),
     )
-    unchanged_count = await collect_once(
+    unchanged_count = await capture_snapshots_once(
         client,
         sessions=db_session_factory,
         now=lambda: datetime(2026, 6, 8, 23, 20, tzinfo=UTC),

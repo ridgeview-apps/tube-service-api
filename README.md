@@ -9,13 +9,13 @@ calendar day.
 There are three deliberately separate parts:
 
 - **API:** serves saved data to the mobile app.
-- **Collector:** polls TfL once every 10 minutes and writes a snapshot only
+- **Snapshot worker:** polls TfL once every 10 minutes and writes a snapshot only
   when a rail line's status changes. Each snapshot contains its complete
   status list. It covers Tube, Elizabeth line, DLR, London Overground, and
   Trams.
 - **Database:** SQLite locally; use PostgreSQL when deployed.
 
-Run the API and collector as separate processes in production. This prevents
+Run the API and snapshot worker as separate processes in production. This prevents
 multiple web workers from accidentally polling and saving duplicate data.
 The first collection of each London day stores a baseline for every line.
 Later collections store only changes, so daily history is a simple date-range
@@ -44,16 +44,16 @@ Start the API:
 uv run uvicorn app.main:app --reload
 ```
 
-In another terminal, start the collector:
+In another terminal, start the snapshot worker:
 
 ```bash
-uv run python -m app.workers.line_status_collector
+uv run python -m app.workers.line_status_snapshot_worker
 ```
 
 Run a single collection for a quick check:
 
 ```bash
-uv run python -m app.workers.line_status_collector --once
+uv run python -m app.workers.line_status_snapshot_worker --once
 ```
 
 Open:
@@ -101,9 +101,9 @@ Choose a host that supports:
 - One continuously running worker using:
 
 ```bash
-python -m app.workers.line_status_collector
+python -m app.workers.line_status_snapshot_worker
 ```
 
 Set the same `DATABASE_URL` and `TFL_API_KEY` on both services. The API is
-stateless, so it can later scale horizontally; keep exactly one collector
+stateless, so it can later scale horizontally; keep exactly one snapshot worker
 instance unless database-level coordination is added.
