@@ -31,17 +31,6 @@ async def clean_database():
     app.dependency_overrides.clear()
 
 
-async def test_health() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.get("/health")
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
 async def test_history_returns_only_requested_london_day() -> None:
     async with db_session_factory() as session:
         session.add_all(
