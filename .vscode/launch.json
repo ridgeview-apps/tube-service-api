@@ -6,6 +6,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
+      "consoleTitle": "Tube Service API",
       "args": [
         "app.main:app",
         "--reload"
@@ -16,7 +17,8 @@
       "name": "Snapshot Worker",
       "type": "debugpy",
       "request": "launch",
-      "module": "app.workers.line_status_snapshot_worker"
+      "module": "app.workers.line_status_snapshot_worker",
+      "consoleTitle": "Line Status Snapshot Worker"
     }
   ]
 }
