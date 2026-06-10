@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.tfl import TflClient, TflLine, TflLineStatus
 from app.config import get_settings
-from app.database import create_tables, session_factory
+from app.database import create_tables
+from app.database import session_factory as default_session_factory
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.repository import get_latest_snapshots_by_line
 from app.line_status.time import LONDON, london_day_bounds_utc
@@ -20,22 +21,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-type StatusValue = tuple[int, str, str | None]
+type _StatusValue = tuple[int, str, str | None]
 
 
-def utc_now() -> datetime:
+def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
 async def run(*, once: bool = False) -> None:
     settings = get_settings()
     await create_tables()
-    client = TflClient(settings.tfl_api_key)
+    tfl_client = TflClient(settings.tfl_api_key)
 
     try:
         while True:
             try:
-                stored_snapshot_count = await capture_snapshots_once(client)
+                stored_snapshot_count = await capture_snapshots_once(tfl_client)
                 logger.info("Stored %s line status snapshots", stored_snapshot_count)
             except Exception:
                 logger.exception("TfL status collection failed")
@@ -45,21 +46,21 @@ async def run(*, once: bool = False) -> None:
                 return
             await asyncio.sleep(settings.poll_interval_seconds)
     finally:
-        await client.close()
+        await tfl_client.close()
 
 
 async def capture_snapshots_once(
-    client: TflClient,
+    tfl_client: TflClient,
     *,
-    sessions: async_sessionmaker[AsyncSession] = session_factory,
-    now: Callable[[], datetime] = utc_now,
+    session_factory: async_sessionmaker[AsyncSession] = default_session_factory,
+    now: Callable[[], datetime] = _utc_now,
 ) -> int:
     observed_at = now()
-    remote_lines = await client.get_rail_line_statuses()
+    remote_lines = await tfl_client.get_rail_line_statuses()
     today_in_london = observed_at.astimezone(LONDON).date()
     today_start_utc, tomorrow_start_utc = london_day_bounds_utc(today_in_london)
 
-    async with sessions() as session:
+    async with session_factory() as session:
         latest_snapshots_by_line = await get_latest_snapshots_by_line(
             session=session,
             line_ids=[line.id for line in remote_lines],
@@ -70,8 +71,8 @@ async def capture_snapshots_once(
 
         for remote_line in remote_lines:
             latest_local_snapshot = latest_snapshots_by_line.get(remote_line.id)
-            if snapshot_changed(remote_line, latest_local_snapshot):
-                snapshots_to_store.append(create_snapshot(remote_line, observed_at))
+            if _snapshot_changed(remote_line, latest_local_snapshot):
+                snapshots_to_store.append(_create_snapshot(remote_line, observed_at))
 
         session.add_all(snapshots_to_store)
         await session.commit()
@@ -79,7 +80,7 @@ async def capture_snapshots_once(
     return len(snapshots_to_store)
 
 
-def snapshot_changed(
+def _snapshot_changed(
     remote_line: TflLine,
     local_snapshot: LineStatusSnapshot | None,
 ) -> bool:
@@ -93,17 +94,17 @@ def snapshot_changed(
         return True
 
     remote_statuses = sorted(
-        (status_value(status) for status in remote_line.statuses),
-        key=status_sort_key,
+        (_status_value(status) for status in remote_line.statuses),
+        key=_status_sort_key,
     )
     local_statuses = sorted(
-        (status_value(status) for status in local_snapshot.statuses),
-        key=status_sort_key,
+        (_status_value(status) for status in local_snapshot.statuses),
+        key=_status_sort_key,
     )
     return remote_statuses != local_statuses
 
 
-def status_value(status: TflLineStatus | LineStatus) -> StatusValue:
+def _status_value(status: TflLineStatus | LineStatus) -> _StatusValue:
     return (
         status.status_severity,
         status.status_description,
@@ -111,12 +112,12 @@ def status_value(status: TflLineStatus | LineStatus) -> StatusValue:
     )
 
 
-def status_sort_key(status: StatusValue) -> tuple[int, str, str]:
+def _status_sort_key(status: _StatusValue) -> tuple[int, str, str]:
     severity, description, reason = status
     return severity, description, reason or ""
 
 
-def create_snapshot(
+def _create_snapshot(
     line: TflLine,
     observed_at: datetime,
 ) -> LineStatusSnapshot:

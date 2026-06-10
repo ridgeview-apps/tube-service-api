@@ -68,12 +68,12 @@ async def test_capture_snapshots_once_only_stores_changed_lines() -> None:
 
     first_count = await capture_snapshots_once(
         client,
-        sessions=db_session_factory,
+        session_factory=db_session_factory,
         now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
     )
     unchanged_count = await capture_snapshots_once(
         client,
-        sessions=db_session_factory,
+        session_factory=db_session_factory,
         now=lambda: datetime(2026, 6, 9, 8, 10, tzinfo=UTC),
     )
 
@@ -83,7 +83,7 @@ async def test_capture_snapshots_once_only_stores_changed_lines() -> None:
     ]
     changed_count = await capture_snapshots_once(
         client,
-        sessions=db_session_factory,
+        session_factory=db_session_factory,
         now=lambda: datetime(2026, 6, 9, 8, 20, tzinfo=UTC),
     )
 
@@ -114,9 +114,15 @@ async def test_status_order_does_not_count_as_a_change() -> None:
     )
     client = FakeTflClient([district])
 
-    first_count = await capture_snapshots_once(client, sessions=db_session_factory)
+    first_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+    )
     district.statuses.reverse()
-    reordered_count = await capture_snapshots_once(client, sessions=db_session_factory)
+    reordered_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+    )
 
     assert first_count == 1
     assert reordered_count == 0
@@ -129,17 +135,17 @@ async def test_first_collection_of_new_london_day_stores_baseline() -> None:
 
     previous_day_count = await capture_snapshots_once(
         client,
-        sessions=db_session_factory,
+        session_factory=db_session_factory,
         now=lambda: datetime(2026, 6, 8, 22, 50, tzinfo=UTC),
     )
     new_day_count = await capture_snapshots_once(
         client,
-        sessions=db_session_factory,
+        session_factory=db_session_factory,
         now=lambda: datetime(2026, 6, 8, 23, 10, tzinfo=UTC),
     )
     unchanged_count = await capture_snapshots_once(
         client,
-        sessions=db_session_factory,
+        session_factory=db_session_factory,
         now=lambda: datetime(2026, 6, 8, 23, 20, tzinfo=UTC),
     )
 
