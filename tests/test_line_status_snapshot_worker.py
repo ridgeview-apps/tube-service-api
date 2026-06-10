@@ -29,6 +29,8 @@ def line(
     line_id: str,
     description: str = "Good Service",
     reason: str | None = None,
+    disruption_category: str | None = None,
+    additional_info: str | None = None,
 ) -> TflLine:
     return TflLine(
         id=line_id,
@@ -39,6 +41,8 @@ def line(
                 status_severity=10 if description == "Good Service" else 6,
                 status_description=description,
                 reason=reason,
+                disruption_category=disruption_category,
+                additional_info=additional_info,
             )
         ],
     )
@@ -61,6 +65,11 @@ async def stored_status_count() -> int:
     async with db_session_factory() as session:
         count = await session.scalar(select(func.count()).select_from(LineStatus))
     return count or 0
+
+
+async def latest_stored_status() -> LineStatus:
+    async with db_session_factory() as session:
+        return await session.scalar(select(LineStatus).order_by(LineStatus.id.desc()))
 
 
 async def test_capture_snapshots_once_only_stores_changed_lines() -> None:
@@ -128,6 +137,44 @@ async def test_status_order_does_not_count_as_a_change() -> None:
     assert reordered_count == 0
     assert await stored_snapshot_count() == 1
     assert await stored_status_count() == 2
+
+
+async def test_disruption_details_count_as_a_change_and_are_stored() -> None:
+    client = FakeTflClient(
+        [
+            line(
+                "victoria",
+                "Severe Delays",
+                "Signal failure",
+                disruption_category="RealTime",
+                additional_info="Tickets accepted on buses",
+            )
+        ]
+    )
+
+    first_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+    )
+    client.lines = [
+        line(
+            "victoria",
+            "Severe Delays",
+            "Signal failure",
+            disruption_category="RealTime",
+            additional_info="Tickets accepted on buses and National Rail",
+        )
+    ]
+    changed_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+    )
+
+    stored_status = await latest_stored_status()
+    assert first_count == 1
+    assert changed_count == 1
+    assert stored_status.disruption_category == "RealTime"
+    assert stored_status.additional_info == "Tickets accepted on buses and National Rail"
 
 
 async def test_first_collection_of_new_london_day_stores_baseline() -> None:

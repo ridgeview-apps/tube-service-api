@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-type _StatusValue = tuple[int, str, str | None]
+type _StatusValue = tuple[int, str, str | None, str | None, str | None]
 
 
 def _utc_now() -> datetime:
@@ -109,12 +109,20 @@ def _status_value(status: TflLineStatus | LineStatus) -> _StatusValue:
         status.status_severity,
         status.status_description,
         status.reason,
+        status.disruption_category,
+        status.additional_info,
     )
 
 
-def _status_sort_key(status: _StatusValue) -> tuple[int, str, str]:
-    severity, description, reason = status
-    return severity, description, reason or ""
+def _status_sort_key(status: _StatusValue) -> tuple[int, str, str, str, str]:
+    severity, description, reason, disruption_category, additional_info = status
+    return (
+        severity,
+        description,
+        reason or "",
+        disruption_category or "",
+        additional_info or "",
+    )
 
 
 def _create_snapshot(
@@ -131,6 +139,8 @@ def _create_snapshot(
                 status_severity=status.status_severity,
                 status_description=status.status_description,
                 reason=status.reason,
+                disruption_category=status.disruption_category,
+                additional_info=status.additional_info,
             )
             for status in line.statuses
         ],

@@ -34,4 +34,6 @@ class LineStatus(Base):
     status_severity: Mapped[int] = mapped_column(Integer)
     status_description: Mapped[str] = mapped_column(String(128))
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    disruption_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    additional_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     snapshot: Mapped[LineStatusSnapshot] = relationship(back_populates="statuses")

@@ -10,6 +10,8 @@ class TflLineStatus:
     status_severity: int
     status_description: str
     reason: str | None
+    disruption_category: str | None = None
+    additional_info: str | None = None
 
 
 @dataclass(frozen=True)
@@ -60,12 +62,15 @@ class TflClient:
         seen: set[TflLineStatus] = set()
 
         for raw_status in raw_statuses:
-            reason = raw_status.get("reason")
-            normalized_reason = reason.strip() or None if reason is not None else None
+            disruption = raw_status.get("disruption") or {}
             status = TflLineStatus(
                 status_severity=raw_status["statusSeverity"],
                 status_description=raw_status["statusSeverityDescription"].strip(),
-                reason=normalized_reason,
+                reason=TflClient._normalize_optional_text(raw_status.get("reason")),
+                disruption_category=TflClient._normalize_optional_text(disruption.get("category")),
+                additional_info=TflClient._normalize_optional_text(
+                    disruption.get("additionalInfo")
+                ),
             )
 
             if status not in seen:
@@ -73,3 +78,7 @@ class TflClient:
                 statuses.append(status)
 
         return statuses
+
+    @staticmethod
+    def _normalize_optional_text(value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
