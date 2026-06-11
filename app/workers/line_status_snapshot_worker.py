@@ -57,15 +57,15 @@ async def capture_snapshots_once(
 ) -> int:
     observed_at = now()
     remote_lines = await tfl_client.get_rail_line_statuses()
-    today_in_london = observed_at.astimezone(LONDON).date()
-    today_start_utc, tomorrow_start_utc = london_day_bounds_utc(today_in_london)
+    observed_day_in_london = observed_at.astimezone(LONDON).date()
+    day_start_utc, next_day_start_utc = london_day_bounds_utc(observed_day_in_london)
 
     async with session_factory() as session:
         latest_snapshots_by_line = await get_latest_snapshots_by_line(
             session=session,
             line_ids=[line.id for line in remote_lines],
-            start=today_start_utc,
-            end=tomorrow_start_utc,
+            start=day_start_utc,
+            end=next_day_start_utc,
         )
         snapshots_to_store: list[LineStatusSnapshot] = []
 
