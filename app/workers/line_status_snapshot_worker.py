@@ -55,7 +55,7 @@ async def capture_snapshots_once(
     session_factory: async_sessionmaker[AsyncSession] = default_session_factory,
     now: Callable[[], datetime] = _utc_now,
 ) -> int:
-    observed_at = now()
+    observed_at = now().replace(microsecond=0)
     remote_lines = await tfl_client.get_rail_line_statuses()
     observed_day_in_london = observed_at.astimezone(LONDON).date()
     day_start_utc, next_day_start_utc = london_day_bounds_utc(observed_day_in_london)

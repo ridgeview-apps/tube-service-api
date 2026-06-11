@@ -72,6 +72,26 @@ async def latest_stored_status() -> LineStatus:
         return await session.scalar(select(LineStatus).order_by(LineStatus.id.desc()))
 
 
+async def latest_stored_snapshot() -> LineStatusSnapshot:
+    async with db_session_factory() as session:
+        return await session.scalar(
+            select(LineStatusSnapshot).order_by(LineStatusSnapshot.id.desc())
+        )
+
+
+async def test_observed_at_is_stored_at_second_precision() -> None:
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 0, 30, 123456, tzinfo=UTC),
+    )
+
+    snapshot = await latest_stored_snapshot()
+    assert snapshot.observed_at == datetime(2026, 6, 9, 8, 0, 30)
+
+
 async def test_capture_snapshots_once_only_stores_changed_lines() -> None:
     client = FakeTflClient([line("victoria"), line("central")])
 
