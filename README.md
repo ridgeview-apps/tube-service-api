@@ -60,8 +60,8 @@ Open:
 
 - API documentation: <http://127.0.0.1:8000/docs>
 - Health check: <http://127.0.0.1:8000/health>
-- Example history:
-  <http://127.0.0.1:8000/v1/line-status/history?line_id=victoria&date=2026-06-09>
+- Example timeline:
+  <http://127.0.0.1:8000/v1/line-status/timeline?line_id=victoria&date=2026-06-09>
 
 Anonymous TfL requests currently work at a lower rate limit. Add your TfL
 `app_key` to `TFL_API_KEY` in `.env` before deploying.

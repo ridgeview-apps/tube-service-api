@@ -1,7 +1,7 @@
 from datetime import date
 
-from app.line_status.cache import DailyDisruptionSummaryCache, DailyHistoryCache
-from app.line_status.schemas import DailyHistoryRead, LineDisruptionSummaryRead
+from app.line_status.cache import DailyDisruptionSummaryCache, DailyTimelineCache
+from app.line_status.schemas import DailyTimelineRead, LineDisruptionSummaryRead
 
 
 class FakeClock:
@@ -15,8 +15,8 @@ class FakeClock:
         self.current_time += seconds
 
 
-def _history(*, line_id: str, day: date) -> DailyHistoryRead:
-    return DailyHistoryRead(
+def _timeline(*, line_id: str, day: date) -> DailyTimelineRead:
+    return DailyTimelineRead(
         line_id=line_id,
         date=day,
         timezone="Europe/London",
@@ -24,55 +24,55 @@ def _history(*, line_id: str, day: date) -> DailyHistoryRead:
     )
 
 
-def test_stored_history_can_be_retrieved() -> None:
-    cache = DailyHistoryCache()
+def test_stored_timeline_can_be_retrieved() -> None:
+    cache = DailyTimelineCache()
     day = date(2026, 6, 11)
-    history = _history(line_id="victoria", day=day)
+    timeline = _timeline(line_id="victoria", day=day)
 
     cache.set(
         line_id="victoria",
         day=day,
-        value=history,
+        value=timeline,
         ttl_seconds=60,
     )
 
-    assert cache.get(line_id="victoria", day=day) == history
+    assert cache.get(line_id="victoria", day=day) == timeline
 
 
 def test_line_and_date_are_separate_cache_keys() -> None:
-    cache = DailyHistoryCache()
+    cache = DailyTimelineCache()
     first_day = date(2026, 6, 10)
     second_day = date(2026, 6, 11)
-    victoria_history = _history(line_id="victoria", day=first_day)
-    central_history = _history(line_id="central", day=first_day)
+    victoria_timeline = _timeline(line_id="victoria", day=first_day)
+    central_timeline = _timeline(line_id="central", day=first_day)
 
     cache.set(
         line_id="victoria",
         day=first_day,
-        value=victoria_history,
+        value=victoria_timeline,
         ttl_seconds=60,
     )
     cache.set(
         line_id="central",
         day=first_day,
-        value=central_history,
+        value=central_timeline,
         ttl_seconds=60,
     )
 
-    assert cache.get(line_id="victoria", day=first_day) == victoria_history
-    assert cache.get(line_id="central", day=first_day) == central_history
+    assert cache.get(line_id="victoria", day=first_day) == victoria_timeline
+    assert cache.get(line_id="central", day=first_day) == central_timeline
     assert cache.get(line_id="victoria", day=second_day) is None
 
 
-def test_expired_history_is_removed() -> None:
+def test_expired_timeline_is_removed() -> None:
     clock = FakeClock()
-    cache = DailyHistoryCache(clock=clock)
+    cache = DailyTimelineCache(clock=clock)
     day = date(2026, 6, 11)
 
     cache.set(
         line_id="victoria",
         day=day,
-        value=_history(line_id="victoria", day=day),
+        value=_timeline(line_id="victoria", day=day),
         ttl_seconds=60,
     )
     clock.advance(60)
@@ -80,28 +80,28 @@ def test_expired_history_is_removed() -> None:
     assert cache.get(line_id="victoria", day=day) is None
 
 
-def test_zero_ttl_does_not_store_history() -> None:
-    cache = DailyHistoryCache()
+def test_zero_ttl_does_not_store_timeline() -> None:
+    cache = DailyTimelineCache()
     day = date(2026, 6, 11)
 
     cache.set(
         line_id="victoria",
         day=day,
-        value=_history(line_id="victoria", day=day),
+        value=_timeline(line_id="victoria", day=day),
         ttl_seconds=0,
     )
 
     assert cache.get(line_id="victoria", day=day) is None
 
 
-def test_clear_removes_all_history() -> None:
-    cache = DailyHistoryCache()
+def test_clear_removes_all_timelines() -> None:
+    cache = DailyTimelineCache()
     day = date(2026, 6, 11)
 
     cache.set(
         line_id="victoria",
         day=day,
-        value=_history(line_id="victoria", day=day),
+        value=_timeline(line_id="victoria", day=day),
         ttl_seconds=60,
     )
     cache.clear()
@@ -109,15 +109,15 @@ def test_clear_removes_all_history() -> None:
     assert cache.get(line_id="victoria", day=day) is None
 
 
-def test_oldest_history_is_evicted_when_cache_is_full() -> None:
-    cache = DailyHistoryCache(max_entries=2)
+def test_oldest_timeline_is_evicted_when_cache_is_full() -> None:
+    cache = DailyTimelineCache(max_entries=2)
     day = date(2026, 6, 11)
 
     for line_id in ("victoria", "central", "jubilee"):
         cache.set(
             line_id=line_id,
             day=day,
-            value=_history(line_id=line_id, day=day),
+            value=_timeline(line_id=line_id, day=day),
             ttl_seconds=60,
         )
 

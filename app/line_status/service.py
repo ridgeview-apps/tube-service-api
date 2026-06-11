@@ -3,9 +3,16 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.line_status.cache import daily_disruption_summary_cache, daily_history_cache
+from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
+from app.line_status.models import LineStatusSnapshot
 from app.line_status.repository import get_disruption_summary, get_line_history
-from app.line_status.schemas import DailyHistoryRead, LineDisruptionSummaryRead
+from app.line_status.schemas import (
+    DailyTimelineRead,
+    LineDisruptionSummaryRead,
+    LineStatusRead,
+    LineStatusSnapshotRead,
+)
+from app.line_status.severity import TIMELINE_SEVERITIES
 from app.line_status.time import LONDON, london_day_bounds_utc, today_in_london
 
 
@@ -18,18 +25,57 @@ def _daily_cache_ttl_seconds(day: date) -> int:
     )
 
 
-async def get_daily_history(
+def _timeline_snapshots(
+    snapshots: list[LineStatusSnapshot],
+) -> list[LineStatusSnapshotRead]:
+    timeline: list[LineStatusSnapshotRead] = []
+    previous_statuses: list[LineStatusRead] | None = None
+
+    for snapshot in reversed(snapshots):
+        statuses = sorted(
+            (
+                LineStatusRead.model_validate(status)
+                for status in snapshot.statuses
+                if status.status_severity in TIMELINE_SEVERITIES
+            ),
+            key=lambda status: (
+                status.status_severity,
+                status.status_description,
+                status.reason or "",
+                status.disruption_category or "",
+                status.additional_info or "",
+            ),
+        )
+        if not statuses or statuses == previous_statuses:
+            continue
+
+        timeline.append(
+            LineStatusSnapshotRead(
+                line_id=snapshot.line_id,
+                line_name=snapshot.line_name,
+                mode_name=snapshot.mode_name,
+                observed_at=snapshot.observed_at,
+                statuses=statuses,
+            )
+        )
+        previous_statuses = statuses
+
+    timeline.reverse()
+    return timeline
+
+
+async def get_daily_timeline(
     session: AsyncSession,
     line_id: str,
     day: date,
-) -> DailyHistoryRead:
+) -> DailyTimelineRead:
     normalized_line_id = line_id.lower()
-    cached_history = daily_history_cache.get(
+    cached_timeline = daily_timeline_cache.get(
         line_id=normalized_line_id,
         day=day,
     )
-    if cached_history is not None:
-        return cached_history
+    if cached_timeline is not None:
+        return cached_timeline
 
     start, end = london_day_bounds_utc(day)
 
@@ -39,20 +85,20 @@ async def get_daily_history(
         start=start,
         end=end,
     )
-    history = DailyHistoryRead(
+    timeline = DailyTimelineRead(
         line_id=normalized_line_id,
         date=day,
         timezone=str(LONDON),
-        snapshots=snapshots,
+        snapshots=_timeline_snapshots(snapshots),
     )
 
-    daily_history_cache.set(
+    daily_timeline_cache.set(
         line_id=normalized_line_id,
         day=day,
-        value=history,
+        value=timeline,
         ttl_seconds=_daily_cache_ttl_seconds(day),
     )
-    return history
+    return timeline
 
 
 async def get_daily_disruption_summary(

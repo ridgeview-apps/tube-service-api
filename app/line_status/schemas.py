@@ -9,6 +9,8 @@ class LineStatusRead(BaseModel):
     status_severity: int
     status_description: str
     reason: str | None
+    disruption_category: str | None
+    additional_info: str | None
 
 
 class LineStatusSnapshotRead(BaseModel):
@@ -26,7 +28,7 @@ class LineStatusSnapshotRead(BaseModel):
         return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
-class DailyHistoryRead(BaseModel):
+class DailyTimelineRead(BaseModel):
     line_id: str
     date: date
     timezone: str

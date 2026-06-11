@@ -29,3 +29,5 @@ DISRUPTION_SEVERITIES = frozenset(
         TflRailStatusSeverity.MINOR_DELAYS,
     }
 )
+
+TIMELINE_SEVERITIES = DISRUPTION_SEVERITIES | {TflRailStatusSeverity.GOOD_SERVICE}
