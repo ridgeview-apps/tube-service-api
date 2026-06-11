@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./tube_service.db"
     tfl_api_key: str | None = None
     poll_interval_seconds: int = Field(default=600, ge=30)
+    history_cache_today_ttl_seconds: int = Field(default=120, ge=0)
+    history_cache_past_ttl_seconds: int = Field(default=3600, ge=0)
 
 
 @lru_cache

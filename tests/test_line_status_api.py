@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_session
+from app.line_status.cache import daily_history_cache
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.time import today_in_london
 from app.main import app
@@ -24,11 +25,13 @@ async def get_test_session():
 
 @pytest.fixture(autouse=True)
 async def clean_database():
+    daily_history_cache.clear()
     app.dependency_overrides[get_session] = get_test_session
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     yield
+    daily_history_cache.clear()
     app.dependency_overrides.clear()
 
 
