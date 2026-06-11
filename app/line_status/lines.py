@@ -1,0 +1,24 @@
+SUPPORTED_LINE_IDS = frozenset(
+    {
+        "bakerloo",
+        "central",
+        "circle",
+        "district",
+        "dlr",
+        "elizabeth",
+        "hammersmith-city",
+        "jubilee",
+        "liberty",
+        "lioness",
+        "metropolitan",
+        "mildmay",
+        "northern",
+        "piccadilly",
+        "suffragette",
+        "tram",
+        "victoria",
+        "waterloo-city",
+        "weaver",
+        "windrush",
+    }
+)

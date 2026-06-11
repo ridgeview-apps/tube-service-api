@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 from app.line_status import service
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
+from app.line_status.lines import SUPPORTED_LINE_IDS
 
 
 async def test_daily_timeline_is_cached_by_line_and_date(monkeypatch) -> None:
@@ -49,5 +50,8 @@ async def test_daily_disruption_summary_is_cached_by_date(monkeypatch) -> None:
 
     assert first_result == second_result
     assert get_disruption_summary.await_count == 1
+    assert {item.line_id for item in first_result} == SUPPORTED_LINE_IDS
+    assert next(item for item in first_result if item.line_id == "circle").disrupted
+    assert not next(item for item in first_result if item.line_id == "northern").disrupted
 
     daily_disruption_summary_cache.clear()

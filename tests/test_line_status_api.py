@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_session
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
+from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.time import today_in_london
 from app.main import app
@@ -173,6 +174,71 @@ async def test_timeline_rejects_future_date() -> None:
     assert response.json() == {"detail": "Date cannot be in the future"}
 
 
+async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
+    async with db_session_factory() as session:
+        session.add_all(
+            [
+                LineStatusSnapshot(
+                    line_id="victoria",
+                    line_name="Victoria",
+                    mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=6,
+                            status_description="Severe Delays",
+                            reason="Signal failure",
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="victoria",
+                    line_name="Victoria",
+                    mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 9, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=19,
+                            status_description="Information",
+                            reason="Station information",
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="victoria",
+                    line_name="Victoria",
+                    mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 10, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=10,
+                            status_description="Good Service",
+                            reason=None,
+                        )
+                    ],
+                ),
+            ]
+        )
+        await session.commit()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/line-status/timeline",
+            params={"line_id": "victoria", "date": date(2026, 6, 9).isoformat()},
+        )
+
+    assert response.status_code == 200
+    snapshots = response.json()["snapshots"]
+    assert [snapshot["statuses"][0]["status_description"] for snapshot in snapshots] == [
+        "Good Service",
+        "Severe Delays",
+    ]
+    assert snapshots[1]["observed_at"].startswith("2026-06-09T08:00:00")
+
+
 async def test_disruption_summary_reports_any_disruption_for_each_line() -> None:
     async with db_session_factory() as session:
         session.add_all(
@@ -230,10 +296,11 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
         )
 
     assert response.status_code == 200
-    assert response.json() == [
-        {"line_id": "circle", "disrupted": True},
-        {"line_id": "northern", "disrupted": False},
-    ]
+    summary = {item["line_id"]: item["disrupted"] for item in response.json()}
+    assert set(summary) == SUPPORTED_LINE_IDS
+    assert summary["circle"] is True
+    assert summary["northern"] is False
+    assert all(not disrupted for line_id, disrupted in summary.items() if line_id != "circle")
 
 
 async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
@@ -270,7 +337,10 @@ async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json() == [{"line_id": "district", "disrupted": True}]
+    summary = {item["line_id"]: item["disrupted"] for item in response.json()}
+    assert set(summary) == SUPPORTED_LINE_IDS
+    assert summary["district"] is True
+    assert all(not disrupted for line_id, disrupted in summary.items() if line_id != "district")
 
 
 async def test_disruption_summary_defaults_to_today_and_rejects_future_date() -> None:
@@ -285,6 +355,8 @@ async def test_disruption_summary_defaults_to_today_and_rejects_future_date() ->
         )
 
     assert today_response.status_code == 200
-    assert today_response.json() == []
+    assert today_response.json() == [
+        {"line_id": line_id, "disrupted": False} for line_id in sorted(SUPPORTED_LINE_IDS)
+    ]
     assert future_response.status_code == 422
     assert future_response.json() == {"detail": "Date cannot be in the future"}

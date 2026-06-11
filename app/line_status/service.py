@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
+from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatusSnapshot
 from app.line_status.repository import get_disruption_summary, get_line_history
 from app.line_status.schemas import (
@@ -116,8 +117,11 @@ async def get_daily_disruption_summary(
         end=end,
     )
     summary = [
-        LineDisruptionSummaryRead(line_id=line_id, disrupted=disrupted)
-        for line_id, disrupted in disruption_flags.items()
+        LineDisruptionSummaryRead(
+            line_id=line_id,
+            disrupted=disruption_flags.get(line_id, False),
+        )
+        for line_id in sorted(SUPPORTED_LINE_IDS)
     ]
     daily_disruption_summary_cache.set(
         day=day,
