@@ -3,14 +3,21 @@ from dataclasses import dataclass
 from datetime import date
 from time import monotonic
 
-from app.line_status.schemas import DailyHistoryRead
+from app.line_status.schemas import DailyHistoryRead, LineDisruptionSummaryRead
 
 type HistoryCacheKey = tuple[str, date]
+type DisruptionSummary = list[LineDisruptionSummaryRead]
 
 
 @dataclass
 class _CacheEntry:
     value: DailyHistoryRead
+    expires_at: float
+
+
+@dataclass
+class _DisruptionSummaryCacheEntry:
+    value: DisruptionSummary
     expires_at: float
 
 
@@ -65,12 +72,65 @@ class DailyHistoryCache:
     def _remove_expired_entries(self) -> None:
         current_time = self._clock()
         expired_keys = [
-            key
-            for key, entry in self._entries.items()
-            if entry.expires_at <= current_time
+            key for key, entry in self._entries.items() if entry.expires_at <= current_time
         ]
         for key in expired_keys:
             del self._entries[key]
 
 
+class DailyDisruptionSummaryCache:
+    def __init__(
+        self,
+        *,
+        max_entries: int = 32,
+        clock: Callable[[], float] = monotonic,
+    ) -> None:
+        self._entries: dict[date, _DisruptionSummaryCacheEntry] = {}
+        self._max_entries = max_entries
+        self._clock = clock
+
+    def get(self, *, day: date) -> DisruptionSummary | None:
+        entry = self._entries.get(day)
+        if entry is None:
+            return None
+
+        if entry.expires_at <= self._clock():
+            del self._entries[day]
+            return None
+
+        return entry.value
+
+    def set(
+        self,
+        *,
+        day: date,
+        value: DisruptionSummary,
+        ttl_seconds: int,
+    ) -> None:
+        if ttl_seconds <= 0:
+            return
+
+        self._remove_expired_entries()
+        if day not in self._entries and len(self._entries) >= self._max_entries:
+            oldest_day = next(iter(self._entries))
+            del self._entries[oldest_day]
+
+        self._entries[day] = _DisruptionSummaryCacheEntry(
+            value=value,
+            expires_at=self._clock() + ttl_seconds,
+        )
+
+    def clear(self) -> None:
+        self._entries.clear()
+
+    def _remove_expired_entries(self) -> None:
+        current_time = self._clock()
+        expired_days = [
+            day for day, entry in self._entries.items() if entry.expires_at <= current_time
+        ]
+        for day in expired_days:
+            del self._entries[day]
+
+
 daily_history_cache = DailyHistoryCache()
+daily_disruption_summary_cache = DailyDisruptionSummaryCache()

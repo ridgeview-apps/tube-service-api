@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.line_status.models import LineStatusSnapshot
+from app.line_status.models import LineStatus, LineStatusSnapshot
+from app.line_status.severity import DISRUPTION_SEVERITIES
 
 
 async def get_latest_snapshots_by_line(
@@ -63,3 +64,30 @@ async def get_line_history(
         .order_by(LineStatusSnapshot.observed_at.desc())
     )
     return list((await session.scalars(statement)).all())
+
+
+async def get_disruption_summary(
+    session: AsyncSession,
+    start: datetime,
+    end: datetime,
+) -> dict[str, bool]:
+    disrupted = case(
+        (LineStatus.status_severity.in_(tuple(DISRUPTION_SEVERITIES)), 1),
+        else_=0,
+    )
+    statement = (
+        select(
+            LineStatusSnapshot.line_id,
+            func.max(disrupted).label("disrupted"),
+        )
+        .outerjoin(LineStatus, LineStatus.snapshot_id == LineStatusSnapshot.id)
+        .where(
+            LineStatusSnapshot.observed_at >= start,
+            LineStatusSnapshot.observed_at < end,
+        )
+        .group_by(LineStatusSnapshot.line_id)
+        .order_by(LineStatusSnapshot.line_id)
+    )
+
+    rows = (await session.execute(statement)).all()
+    return {line_id: bool(disruption_found) for line_id, disruption_found in rows}

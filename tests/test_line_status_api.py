@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_session
-from app.line_status.cache import daily_history_cache
+from app.line_status.cache import daily_disruption_summary_cache, daily_history_cache
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.time import today_in_london
 from app.main import app
@@ -26,12 +26,14 @@ async def get_test_session():
 @pytest.fixture(autouse=True)
 async def clean_database():
     daily_history_cache.clear()
+    daily_disruption_summary_cache.clear()
     app.dependency_overrides[get_session] = get_test_session
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     yield
     daily_history_cache.clear()
+    daily_disruption_summary_cache.clear()
     app.dependency_overrides.clear()
 
 
@@ -126,3 +128,120 @@ async def test_history_rejects_future_date() -> None:
 
     assert response.status_code == 422
     assert response.json() == {"detail": "Date cannot be in the future"}
+
+
+async def test_disruption_summary_reports_any_disruption_for_each_line() -> None:
+    async with db_session_factory() as session:
+        session.add_all(
+            [
+                LineStatusSnapshot(
+                    line_id="circle",
+                    line_name="Circle",
+                    mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=10,
+                            status_description="Good Service",
+                            reason=None,
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="circle",
+                    line_name="Circle",
+                    mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=9,
+                            status_description="Minor Delays",
+                            reason="Earlier delays",
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="northern",
+                    line_name="Northern",
+                    mode_name="tube",
+                    observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=10,
+                            status_description="Good Service",
+                            reason=None,
+                        )
+                    ],
+                ),
+            ]
+        )
+        await session.commit()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/line-status/disruption-summary",
+            params={"date": date(2026, 6, 9).isoformat()},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"line_id": "circle", "disrupted": True},
+        {"line_id": "northern", "disrupted": False},
+    ]
+
+
+async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
+    async with db_session_factory() as session:
+        session.add(
+            LineStatusSnapshot(
+                line_id="district",
+                line_name="District",
+                mode_name="tube",
+                observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
+                statuses=[
+                    LineStatus(
+                        status_severity=0,
+                        status_description="Special Service",
+                        reason="Special timetable",
+                    ),
+                    LineStatus(
+                        status_severity=10,
+                        status_description="Good Service",
+                        reason=None,
+                    ),
+                ],
+            )
+        )
+        await session.commit()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/line-status/disruption-summary",
+            params={"date": date(2026, 6, 9).isoformat()},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == [{"line_id": "district", "disrupted": True}]
+
+
+async def test_disruption_summary_defaults_to_today_and_rejects_future_date() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        today_response = await client.get("/v1/line-status/disruption-summary")
+        future_response = await client.get(
+            "/v1/line-status/disruption-summary",
+            params={"date": "2999-01-01"},
+        )
+
+    assert today_response.status_code == 200
+    assert today_response.json() == []
+    assert future_response.status_code == 422
+    assert future_response.json() == {"detail": "Date cannot be in the future"}

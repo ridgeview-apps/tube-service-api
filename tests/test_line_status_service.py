@@ -2,7 +2,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 from app.line_status import service
-from app.line_status.cache import daily_history_cache
+from app.line_status.cache import daily_disruption_summary_cache, daily_history_cache
 
 
 async def test_daily_history_is_cached_by_line_and_date(monkeypatch) -> None:
@@ -28,3 +28,26 @@ async def test_daily_history_is_cached_by_line_and_date(monkeypatch) -> None:
     assert get_line_history.await_count == 1
 
     daily_history_cache.clear()
+
+
+async def test_daily_disruption_summary_is_cached_by_date(monkeypatch) -> None:
+    get_disruption_summary = AsyncMock(return_value={"circle": True, "northern": False})
+    monkeypatch.setattr(service, "get_disruption_summary", get_disruption_summary)
+    daily_disruption_summary_cache.clear()
+
+    requested_day = date(2026, 6, 9)
+    session = AsyncMock()
+
+    first_result = await service.get_daily_disruption_summary(
+        session=session,
+        day=requested_day,
+    )
+    second_result = await service.get_daily_disruption_summary(
+        session=session,
+        day=requested_day,
+    )
+
+    assert first_result == second_result
+    assert get_disruption_summary.await_count == 1
+
+    daily_disruption_summary_cache.clear()

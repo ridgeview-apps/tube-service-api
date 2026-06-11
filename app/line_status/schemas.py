@@ -31,3 +31,8 @@ class DailyHistoryRead(BaseModel):
     date: date
     timezone: str
     snapshots: list[LineStatusSnapshotRead]
+
+
+class LineDisruptionSummaryRead(BaseModel):
+    line_id: str
+    disrupted: bool

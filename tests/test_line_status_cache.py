@@ -1,7 +1,7 @@
 from datetime import date
 
-from app.line_status.cache import DailyHistoryCache
-from app.line_status.schemas import DailyHistoryRead
+from app.line_status.cache import DailyDisruptionSummaryCache, DailyHistoryCache
+from app.line_status.schemas import DailyHistoryRead, LineDisruptionSummaryRead
 
 
 class FakeClock:
@@ -124,3 +124,33 @@ def test_oldest_history_is_evicted_when_cache_is_full() -> None:
     assert cache.get(line_id="victoria", day=day) is None
     assert cache.get(line_id="central", day=day) is not None
     assert cache.get(line_id="jubilee", day=day) is not None
+
+
+def test_disruption_summary_is_cached_by_date() -> None:
+    cache = DailyDisruptionSummaryCache()
+    first_day = date(2026, 6, 10)
+    second_day = date(2026, 6, 11)
+    summary = [
+        LineDisruptionSummaryRead(line_id="circle", disrupted=True),
+        LineDisruptionSummaryRead(line_id="northern", disrupted=False),
+    ]
+
+    cache.set(day=first_day, value=summary, ttl_seconds=60)
+
+    assert cache.get(day=first_day) == summary
+    assert cache.get(day=second_day) is None
+
+
+def test_expired_disruption_summary_is_removed() -> None:
+    clock = FakeClock()
+    cache = DailyDisruptionSummaryCache(clock=clock)
+    day = date(2026, 6, 11)
+
+    cache.set(
+        day=day,
+        value=[LineDisruptionSummaryRead(line_id="circle", disrupted=True)],
+        ttl_seconds=60,
+    )
+    clock.advance(60)
+
+    assert cache.get(day=day) is None
