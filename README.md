@@ -44,6 +44,30 @@ Start the API:
 uv run uvicorn app.main:app --reload
 ```
 
+All `/v1/line-status/*` endpoints require a configured client key in an
+`X-API-Key` request header. Each client has an ID and one or more active random
+secrets. Configure them as JSON:
+
+```env
+CLIENT_API_KEYS={"ios":["64-character-generated-secret"],"widget":["64-character-generated-secret"]}
+```
+
+Generate each client secret separately:
+
+```bash
+openssl rand -hex 32
+```
+
+Clients send the ID and generated secret joined by a dot, such as
+`ios.<generated-secret>`. Multiple secrets can temporarily be configured for
+one client during rotation. The `/health` endpoint remains public, and
+production traffic must use HTTPS so keys are encrypted in transit.
+
+When `APP_ENV=development`, authentication is disabled if `CLIENT_API_KEYS` is
+empty. Configuring keys locally enables authentication, allowing production
+behavior to be tested. Every other environment fails closed if no keys are
+configured.
+
 In another terminal, start the snapshot worker:
 
 ```bash
@@ -62,6 +86,14 @@ Open:
 - Health check: <http://127.0.0.1:8000/health>
 - Example timeline:
   <http://127.0.0.1:8000/v1/line-status/timeline?line_id=victoria&date=2026-06-09>
+
+Example authenticated request:
+
+```bash
+curl \
+  -H "X-API-Key: ios.$IOS_API_KEY" \
+  "http://127.0.0.1:8000/v1/line-status/timeline?line_id=victoria"
+```
 
 Anonymous TfL requests currently work at a lower rate limit. Add your TfL
 `app_key` to `TFL_API_KEY` in `.env` before deploying.
@@ -104,6 +136,8 @@ Choose a host that supports:
 python -m app.workers.line_status_snapshot_worker
 ```
 
-Set the same `DATABASE_URL` and `TFL_API_KEY` on both services. The API is
-stateless, so it can later scale horizontally; keep exactly one snapshot worker
-instance unless database-level coordination is added.
+Set the same `DATABASE_URL` and `TFL_API_KEY` on both services. Set
+`CLIENT_API_KEYS` on the web service and distribute the corresponding key to
+each authorized client. The API is stateless, so it can later scale
+horizontally; keep exactly one snapshot worker instance unless database-level
+coordination is added.

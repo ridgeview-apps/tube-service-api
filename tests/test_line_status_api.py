@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.api.security import require_api_key
 from app.database import Base, get_session
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
 from app.line_status.lines import SUPPORTED_LINE_IDS
@@ -24,11 +25,16 @@ async def get_test_session():
         yield session
 
 
+async def bypass_api_key() -> None:
+    pass
+
+
 @pytest.fixture(autouse=True)
 async def clean_database():
     daily_timeline_cache.clear()
     daily_disruption_summary_cache.clear()
     app.dependency_overrides[get_session] = get_test_session
+    app.dependency_overrides[require_api_key] = bypass_api_key
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
