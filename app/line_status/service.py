@@ -53,8 +53,6 @@ def _timeline_snapshots(
         timeline.append(
             LineStatusSnapshotRead(
                 line_id=snapshot.line_id,
-                line_name=snapshot.line_name,
-                mode_name=snapshot.mode_name,
                 observed_at=snapshot.observed_at,
                 statuses=statuses,
             )

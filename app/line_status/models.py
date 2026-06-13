@@ -12,8 +12,6 @@ class LineStatusSnapshot(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     line_id: Mapped[str] = mapped_column(String(64))
-    line_name: Mapped[str] = mapped_column(String(128))
-    mode_name: Mapped[str] = mapped_column(String(64))
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     statuses: Mapped[list["LineStatus"]] = relationship(
         back_populates="snapshot",

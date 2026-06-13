@@ -50,8 +50,6 @@ async def test_timeline_returns_only_requested_london_day() -> None:
             [
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 8, 22, 59, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -63,8 +61,6 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -76,8 +72,6 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -89,8 +83,6 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 9, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -107,8 +99,6 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 10, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -150,6 +140,8 @@ async def test_timeline_returns_only_requested_london_day() -> None:
     )
     assert body["snapshots"][1]["observed_at"].startswith("2026-06-09T08:00:00")
     assert body["snapshots"][0]["observed_at"].endswith("Z")
+    assert all("line_name" not in snapshot for snapshot in body["snapshots"])
+    assert all("mode_name" not in snapshot for snapshot in body["snapshots"])
 
 
 async def test_timeline_defaults_to_today_in_london() -> None:
@@ -186,8 +178,6 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
             [
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -199,8 +189,6 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 9, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -212,8 +200,6 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    line_name="Victoria",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 10, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -251,8 +237,6 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
             [
                 LineStatusSnapshot(
                     line_id="circle",
-                    line_name="Circle",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -264,8 +248,6 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
                 ),
                 LineStatusSnapshot(
                     line_id="circle",
-                    line_name="Circle",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -277,8 +259,6 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
                 ),
                 LineStatusSnapshot(
                     line_id="northern",
-                    line_name="Northern",
-                    mode_name="tube",
                     observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
                     statuses=[
                         LineStatus(
@@ -314,8 +294,6 @@ async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
         session.add(
             LineStatusSnapshot(
                 line_id="district",
-                line_name="District",
-                mode_name="tube",
                 observed_at=datetime(2026, 6, 9, 7, 0, tzinfo=UTC),
                 statuses=[
                     LineStatus(

@@ -17,8 +17,6 @@ class LineStatusSnapshotRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     line_id: str
-    line_name: str
-    mode_name: str
     observed_at: datetime
     statuses: list[LineStatusRead]
 

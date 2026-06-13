@@ -87,12 +87,6 @@ def _snapshot_changed(
     if local_snapshot is None:
         return True
 
-    if (
-        remote_line.name != local_snapshot.line_name
-        or remote_line.mode_name != local_snapshot.mode_name
-    ):
-        return True
-
     remote_statuses = sorted(
         (_status_value(status) for status in remote_line.statuses),
         key=_status_sort_key,
@@ -131,8 +125,6 @@ def _create_snapshot(
 ) -> LineStatusSnapshot:
     return LineStatusSnapshot(
         line_id=line.id,
-        line_name=line.name,
-        mode_name=line.mode_name,
         observed_at=observed_at,
         statuses=[
             LineStatus(
