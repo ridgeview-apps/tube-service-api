@@ -36,7 +36,6 @@ class DailyTimelineRead(BaseModel):
 
 
 class LineDisruptionSummaryRead(BaseModel):
-    line_id: str
     disrupted: bool
     disruption_count: int
     latest_disruption_at: datetime | None
@@ -50,3 +49,9 @@ class LineDisruptionSummaryRead(BaseModel):
         if value is None or value.tzinfo is not None:
             return value
         return value.replace(tzinfo=UTC)
+
+
+class DailyDisruptionSummaryRead(BaseModel):
+    date: date
+    timezone: str
+    lines: dict[str, LineDisruptionSummaryRead]

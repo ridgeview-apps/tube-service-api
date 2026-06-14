@@ -53,18 +53,14 @@ async def test_daily_disruption_summary_is_cached_by_date(monkeypatch) -> None:
 
     assert first_result == second_result
     assert get_disruption_summary.await_count == 1
-    assert {item.line_id for item in first_result} == SUPPORTED_LINE_IDS
-    assert next(item for item in first_result if item.line_id == "circle").disrupted
-    assert next(item for item in first_result if item.line_id == "circle").disruption_count == 2
-    assert (
-        next(item for item in first_result if item.line_id == "circle").latest_disruption_at
-        == disruption_at
-    )
-    assert not next(item for item in first_result if item.line_id == "northern").disrupted
-    assert next(item for item in first_result if item.line_id == "northern").disruption_count == 0
-    assert (
-        next(item for item in first_result if item.line_id == "northern").latest_disruption_at
-        is None
-    )
+    assert first_result.date == requested_day
+    assert first_result.timezone == "Europe/London"
+    assert set(first_result.lines) == SUPPORTED_LINE_IDS
+    assert first_result.lines["circle"].disrupted
+    assert first_result.lines["circle"].disruption_count == 2
+    assert first_result.lines["circle"].latest_disruption_at == disruption_at
+    assert not first_result.lines["northern"].disrupted
+    assert first_result.lines["northern"].disruption_count == 0
+    assert first_result.lines["northern"].latest_disruption_at is None
 
     daily_disruption_summary_cache.clear()

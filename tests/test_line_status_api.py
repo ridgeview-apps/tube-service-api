@@ -328,7 +328,10 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
         )
 
     assert response.status_code == 200
-    summary = {item["line_id"]: item for item in response.json()}
+    body = response.json()
+    assert body["date"] == "2026-06-09"
+    assert body["timezone"] == "Europe/London"
+    summary = body["lines"]
     assert set(summary) == SUPPORTED_LINE_IDS
     assert summary["circle"]["disrupted"] is True
     assert summary["circle"]["disruption_count"] == 2
@@ -377,7 +380,7 @@ async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
         )
 
     assert response.status_code == 200
-    summary = {item["line_id"]: item for item in response.json()}
+    summary = response.json()["lines"]
     assert set(summary) == SUPPORTED_LINE_IDS
     assert summary["district"]["disrupted"] is True
     assert summary["district"]["disruption_count"] == 1
@@ -430,9 +433,8 @@ async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> No
     }
 
     assert summary_response.status_code == 200
-    summary = {item["line_id"]: item for item in summary_response.json()}
+    summary = summary_response.json()["lines"]
     assert summary["district"] == {
-        "line_id": "district",
         "disrupted": False,
         "disruption_count": 0,
         "latest_disruption_at": None,
@@ -451,14 +453,18 @@ async def test_disruption_summary_defaults_to_today_and_rejects_future_date() ->
         )
 
     assert today_response.status_code == 200
-    assert today_response.json() == [
-        {
-            "line_id": line_id,
-            "disrupted": False,
-            "disruption_count": 0,
-            "latest_disruption_at": None,
-        }
-        for line_id in sorted(SUPPORTED_LINE_IDS)
-    ]
+    today = today_in_london()
+    assert today_response.json() == {
+        "date": today.isoformat(),
+        "timezone": "Europe/London",
+        "lines": {
+            line_id: {
+                "disrupted": False,
+                "disruption_count": 0,
+                "latest_disruption_at": None,
+            }
+            for line_id in sorted(SUPPORTED_LINE_IDS)
+        },
+    }
     assert future_response.status_code == 422
     assert future_response.json() == {"detail": "Date cannot be in the future"}

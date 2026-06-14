@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.security import require_api_key
 from app.database import get_session
-from app.line_status.schemas import DailyTimelineRead, LineDisruptionSummaryRead
+from app.line_status.schemas import DailyDisruptionSummaryRead, DailyTimelineRead
 from app.line_status.service import get_daily_disruption_summary, get_daily_timeline
 from app.line_status.time import today_in_london
 
@@ -47,7 +47,7 @@ async def daily_line_timeline(
     )
 
 
-@router.get("/disruption-summary", response_model=list[LineDisruptionSummaryRead])
+@router.get("/disruption-summary", response_model=DailyDisruptionSummaryRead)
 async def daily_line_disruption_summary(
     session: Annotated[AsyncSession, Depends(get_session)],
     day: Annotated[
@@ -57,7 +57,7 @@ async def daily_line_disruption_summary(
             description="London calendar date; defaults to today",
         ),
     ] = None,
-) -> list[LineDisruptionSummaryRead]:
+) -> DailyDisruptionSummaryRead:
     return await get_daily_disruption_summary(
         session=session,
         day=_requested_day_or_today(day),

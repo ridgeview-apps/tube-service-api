@@ -8,6 +8,7 @@ from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.repository import get_disruption_summary, get_line_history
 from app.line_status.schemas import (
+    DailyDisruptionSummaryRead,
     DailyTimelineRead,
     DisruptionRead,
     LineDisruptionSummaryRead,
@@ -123,7 +124,7 @@ async def get_daily_timeline(
 async def get_daily_disruption_summary(
     session: AsyncSession,
     day: date,
-) -> list[LineDisruptionSummaryRead]:
+) -> DailyDisruptionSummaryRead:
     cached_summary = daily_disruption_summary_cache.get(day=day)
     if cached_summary is not None:
         return cached_summary
@@ -134,15 +135,18 @@ async def get_daily_disruption_summary(
         start=start,
         end=end,
     )
-    summary = [
-        LineDisruptionSummaryRead(
-            line_id=line_id,
-            disrupted=disruptions.get(line_id, (0, None))[0] > 0,
-            disruption_count=disruptions.get(line_id, (0, None))[0],
-            latest_disruption_at=disruptions.get(line_id, (0, None))[1],
-        )
-        for line_id in sorted(SUPPORTED_LINE_IDS)
-    ]
+    summary = DailyDisruptionSummaryRead(
+        date=day,
+        timezone=str(LONDON),
+        lines={
+            line_id: LineDisruptionSummaryRead(
+                disrupted=disruptions.get(line_id, (0, None))[0] > 0,
+                disruption_count=disruptions.get(line_id, (0, None))[0],
+                latest_disruption_at=disruptions.get(line_id, (0, None))[1],
+            )
+            for line_id in sorted(SUPPORTED_LINE_IDS)
+        },
+    )
     daily_disruption_summary_cache.set(
         day=day,
         value=summary,

@@ -3,10 +3,9 @@ from dataclasses import dataclass
 from datetime import date
 from time import monotonic
 
-from app.line_status.schemas import DailyTimelineRead, LineDisruptionSummaryRead
+from app.line_status.schemas import DailyDisruptionSummaryRead, DailyTimelineRead
 
 type TimelineCacheKey = tuple[str, date]
-type DisruptionSummary = list[LineDisruptionSummaryRead]
 
 
 @dataclass
@@ -17,7 +16,7 @@ class _CacheEntry:
 
 @dataclass
 class _DisruptionSummaryCacheEntry:
-    value: DisruptionSummary
+    value: DailyDisruptionSummaryRead
     expires_at: float
 
 
@@ -89,7 +88,7 @@ class DailyDisruptionSummaryCache:
         self._max_entries = max_entries
         self._clock = clock
 
-    def get(self, *, day: date) -> DisruptionSummary | None:
+    def get(self, *, day: date) -> DailyDisruptionSummaryRead | None:
         entry = self._entries.get(day)
         if entry is None:
             return None
@@ -104,7 +103,7 @@ class DailyDisruptionSummaryCache:
         self,
         *,
         day: date,
-        value: DisruptionSummary,
+        value: DailyDisruptionSummaryRead,
         ttl_seconds: int,
     ) -> None:
         if ttl_seconds <= 0:
