@@ -3,14 +3,16 @@ from datetime import UTC, date, datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
-class LineStatusRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    status_severity: int
-    status_description: str
-    reason: str | None
-    disruption_category: str | None
+class DisruptionRead(BaseModel):
+    category: str | None
     additional_info: str | None
+
+
+class LineStatusRead(BaseModel):
+    status_severity: int
+    status_severity_description: str
+    reason: str | None
+    disruption: DisruptionRead | None
 
 
 class LineStatusSnapshotRead(BaseModel):

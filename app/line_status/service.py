@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
 from app.line_status.lines import SUPPORTED_LINE_IDS
-from app.line_status.models import LineStatusSnapshot
+from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.repository import get_disruption_summary, get_line_history
 from app.line_status.schemas import (
     DailyTimelineRead,
+    DisruptionRead,
     LineDisruptionSummaryRead,
     LineStatusRead,
     LineStatusSnapshotRead,
@@ -35,16 +36,16 @@ def _timeline_snapshots(
     for snapshot in reversed(snapshots):
         statuses = sorted(
             (
-                LineStatusRead.model_validate(status)
+                _line_status_read(status)
                 for status in snapshot.statuses
                 if status.status_severity in TIMELINE_SEVERITIES
             ),
             key=lambda status: (
                 status.status_severity,
-                status.status_description,
+                status.status_severity_description,
                 status.reason or "",
-                status.disruption_category or "",
-                status.additional_info or "",
+                (status.disruption.category or "") if status.disruption else "",
+                (status.disruption.additional_info or "") if status.disruption else "",
             ),
         )
         if not statuses or statuses == previous_statuses:
@@ -61,6 +62,25 @@ def _timeline_snapshots(
 
     timeline.reverse()
     return timeline
+
+
+def _line_status_read(status: LineStatus) -> LineStatusRead:
+    disruption_category = status.disruption_category
+    additional_info = status.additional_info
+    disruption = (
+        DisruptionRead(
+            category=disruption_category,
+            additional_info=additional_info,
+        )
+        if disruption_category is not None or additional_info is not None
+        else None
+    )
+    return LineStatusRead(
+        status_severity=status.status_severity,
+        status_severity_description=status.status_description,
+        reason=status.reason,
+        disruption=disruption,
+    )
 
 
 async def get_daily_timeline(

@@ -78,6 +78,8 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                             status_severity=6,
                             status_description="Severe Delays",
                             reason="Test disruption",
+                            disruption_category="RealTime",
+                            additional_info="Tickets accepted on local buses",
                         )
                     ],
                 ),
@@ -89,6 +91,8 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                             status_severity=6,
                             status_description="Severe Delays",
                             reason="Test disruption",
+                            disruption_category="RealTime",
+                            additional_info="Tickets accepted on local buses",
                         ),
                         LineStatus(
                             status_severity=13,
@@ -130,9 +134,18 @@ async def test_timeline_returns_only_requested_london_day() -> None:
     body = response.json()
     assert body["date"] == "2026-06-09"
     assert len(body["snapshots"]) == 3
-    assert body["snapshots"][0]["statuses"][0]["status_description"] == "Good Service"
-    assert body["snapshots"][1]["statuses"][0]["status_description"] == "Severe Delays"
-    assert body["snapshots"][2]["statuses"][0]["status_description"] == "Good Service"
+    assert body["snapshots"][0]["statuses"][0]["status_severity_description"] == "Good Service"
+    assert body["snapshots"][1]["statuses"][0] == {
+        "status_severity": 6,
+        "status_severity_description": "Severe Delays",
+        "reason": "Test disruption",
+        "disruption": {
+            "category": "RealTime",
+            "additional_info": "Tickets accepted on local buses",
+        },
+    }
+    assert body["snapshots"][2]["statuses"][0]["status_severity_description"] == "Good Service"
+    assert body["snapshots"][0]["statuses"][0]["disruption"] is None
     assert all(
         status["status_severity"] <= 10
         for snapshot in body["snapshots"]
@@ -224,7 +237,7 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
 
     assert response.status_code == 200
     snapshots = response.json()["snapshots"]
-    assert [snapshot["statuses"][0]["status_description"] for snapshot in snapshots] == [
+    assert [snapshot["statuses"][0]["status_severity_description"] for snapshot in snapshots] == [
         "Good Service",
         "Severe Delays",
     ]
@@ -411,10 +424,9 @@ async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> No
     assert timeline_response.status_code == 200
     assert timeline_response.json()["snapshots"][0]["statuses"][0] == {
         "status_severity": 4,
-        "status_description": "Planned Closure",
+        "status_severity_description": "Planned Closure",
         "reason": "Engineering works",
-        "disruption_category": None,
-        "additional_info": None,
+        "disruption": None,
     }
 
     assert summary_response.status_code == 200
