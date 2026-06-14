@@ -109,7 +109,7 @@ async def get_daily_disruption_summary(
         return cached_summary
 
     start, end = london_day_bounds_utc(day)
-    disruption_flags = await get_disruption_summary(
+    disruptions = await get_disruption_summary(
         session=session,
         start=start,
         end=end,
@@ -117,7 +117,9 @@ async def get_daily_disruption_summary(
     summary = [
         LineDisruptionSummaryRead(
             line_id=line_id,
-            disrupted=disruption_flags.get(line_id, False),
+            disrupted=disruptions.get(line_id, (0, None))[0] > 0,
+            disruption_count=disruptions.get(line_id, (0, None))[0],
+            latest_disruption_at=disruptions.get(line_id, (0, None))[1],
         )
         for line_id in sorted(SUPPORTED_LINE_IDS)
     ]

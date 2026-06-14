@@ -70,24 +70,67 @@ async def get_disruption_summary(
     session: AsyncSession,
     start: datetime,
     end: datetime,
-) -> dict[str, bool]:
-    disrupted = case(
-        (LineStatus.status_severity.in_(tuple(DISRUPTION_SEVERITIES)), 1),
-        else_=0,
-    )
-    statement = (
+) -> dict[str, tuple[int, datetime | None]]:
+    snapshot_disrupted = func.max(
+        case(
+            (LineStatus.status_severity.in_(tuple(DISRUPTION_SEVERITIES)), 1),
+            else_=0,
+        )
+    ).label("disrupted")
+    snapshots = (
         select(
             LineStatusSnapshot.line_id,
-            func.max(disrupted).label("disrupted"),
+            LineStatusSnapshot.observed_at,
+            snapshot_disrupted,
         )
         .outerjoin(LineStatus, LineStatus.snapshot_id == LineStatusSnapshot.id)
         .where(
             LineStatusSnapshot.observed_at >= start,
             LineStatusSnapshot.observed_at < end,
         )
-        .group_by(LineStatusSnapshot.line_id)
-        .order_by(LineStatusSnapshot.line_id)
+        .group_by(
+            LineStatusSnapshot.id,
+            LineStatusSnapshot.line_id,
+            LineStatusSnapshot.observed_at,
+        )
+        .subquery()
+    )
+    previous_disrupted = func.lag(snapshots.c.disrupted).over(
+        partition_by=snapshots.c.line_id,
+        order_by=snapshots.c.observed_at,
+    )
+    transitions = select(
+        snapshots.c.line_id,
+        snapshots.c.observed_at,
+        snapshots.c.disrupted,
+        previous_disrupted.label("previous_disrupted"),
+    ).subquery()
+    disruption_started = case(
+        (
+            (transitions.c.disrupted == 1)
+            & (func.coalesce(transitions.c.previous_disrupted, 0) == 0),
+            1,
+        ),
+        else_=0,
+    )
+    latest_disruption_at = func.max(
+        case(
+            (transitions.c.disrupted == 1, transitions.c.observed_at),
+            else_=None,
+        )
+    )
+    statement = (
+        select(
+            transitions.c.line_id,
+            func.sum(disruption_started).label("disruption_count"),
+            latest_disruption_at.label("latest_disruption_at"),
+        )
+        .group_by(transitions.c.line_id)
+        .order_by(transitions.c.line_id)
     )
 
     rows = (await session.execute(statement)).all()
-    return {line_id: bool(disruption_found) for line_id, disruption_found in rows}
+    return {
+        line_id: (disruption_count, latest_disruption_at)
+        for line_id, disruption_count, latest_disruption_at in rows
+    }

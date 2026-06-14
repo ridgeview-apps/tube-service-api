@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
 from app.line_status.cache import DailyDisruptionSummaryCache, DailyTimelineCache
 from app.line_status.schemas import DailyTimelineRead, LineDisruptionSummaryRead
@@ -131,8 +131,18 @@ def test_disruption_summary_is_cached_by_date() -> None:
     first_day = date(2026, 6, 10)
     second_day = date(2026, 6, 11)
     summary = [
-        LineDisruptionSummaryRead(line_id="circle", disrupted=True),
-        LineDisruptionSummaryRead(line_id="northern", disrupted=False),
+        LineDisruptionSummaryRead(
+            line_id="circle",
+            disrupted=True,
+            disruption_count=1,
+            latest_disruption_at=datetime(2026, 6, 10, 8, 0, tzinfo=UTC),
+        ),
+        LineDisruptionSummaryRead(
+            line_id="northern",
+            disrupted=False,
+            disruption_count=0,
+            latest_disruption_at=None,
+        ),
     ]
 
     cache.set(day=first_day, value=summary, ttl_seconds=60)
@@ -148,7 +158,14 @@ def test_expired_disruption_summary_is_removed() -> None:
 
     cache.set(
         day=day,
-        value=[LineDisruptionSummaryRead(line_id="circle", disrupted=True)],
+        value=[
+            LineDisruptionSummaryRead(
+                line_id="circle",
+                disrupted=True,
+                disruption_count=1,
+                latest_disruption_at=datetime(2026, 6, 11, 8, 0, tzinfo=UTC),
+            )
+        ],
         ttl_seconds=60,
     )
     clock.advance(60)

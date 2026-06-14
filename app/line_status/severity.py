@@ -21,7 +21,6 @@ DISRUPTION_SEVERITIES = frozenset(
         TflRailStatusSeverity.CLOSED,
         TflRailStatusSeverity.SUSPENDED,
         TflRailStatusSeverity.PART_SUSPENDED,
-        TflRailStatusSeverity.PLANNED_CLOSURE,
         TflRailStatusSeverity.PART_CLOSURE,
         TflRailStatusSeverity.SEVERE_DELAYS,
         TflRailStatusSeverity.REDUCED_SERVICE,
@@ -30,4 +29,7 @@ DISRUPTION_SEVERITIES = frozenset(
     }
 )
 
-TIMELINE_SEVERITIES = DISRUPTION_SEVERITIES | {TflRailStatusSeverity.GOOD_SERVICE}
+TIMELINE_SEVERITIES = DISRUPTION_SEVERITIES | {
+    TflRailStatusSeverity.PLANNED_CLOSURE,
+    TflRailStatusSeverity.GOOD_SERVICE,
+}

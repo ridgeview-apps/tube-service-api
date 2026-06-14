@@ -36,3 +36,15 @@ class DailyTimelineRead(BaseModel):
 class LineDisruptionSummaryRead(BaseModel):
     line_id: str
     disrupted: bool
+    disruption_count: int
+    latest_disruption_at: datetime | None
+
+    @field_validator("latest_disruption_at", mode="after")
+    @classmethod
+    def mark_sqlite_disruption_timestamps_as_utc(
+        cls,
+        value: datetime | None,
+    ) -> datetime | None:
+        if value is None or value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=UTC)

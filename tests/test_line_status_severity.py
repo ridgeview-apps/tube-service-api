@@ -5,7 +5,7 @@ from app.line_status.severity import (
 )
 
 
-def test_disruption_severities_include_all_non_good_service_statuses() -> None:
+def test_disruption_severities_exclude_planned_closure_and_good_service() -> None:
     assert (
         frozenset(
             {
@@ -13,7 +13,6 @@ def test_disruption_severities_include_all_non_good_service_statuses() -> None:
                 TflRailStatusSeverity.CLOSED,
                 TflRailStatusSeverity.SUSPENDED,
                 TflRailStatusSeverity.PART_SUSPENDED,
-                TflRailStatusSeverity.PLANNED_CLOSURE,
                 TflRailStatusSeverity.PART_CLOSURE,
                 TflRailStatusSeverity.SEVERE_DELAYS,
                 TflRailStatusSeverity.REDUCED_SERVICE,
@@ -23,8 +22,16 @@ def test_disruption_severities_include_all_non_good_service_statuses() -> None:
         )
         == DISRUPTION_SEVERITIES
     )
+    assert TflRailStatusSeverity.PLANNED_CLOSURE not in DISRUPTION_SEVERITIES
     assert TflRailStatusSeverity.GOOD_SERVICE not in DISRUPTION_SEVERITIES
 
 
-def test_timeline_severities_include_disruptions_and_good_service() -> None:
-    assert DISRUPTION_SEVERITIES | {TflRailStatusSeverity.GOOD_SERVICE} == TIMELINE_SEVERITIES
+def test_timeline_severities_include_disruptions_planned_closure_and_good_service() -> None:
+    assert (
+        DISRUPTION_SEVERITIES
+        | {
+            TflRailStatusSeverity.PLANNED_CLOSURE,
+            TflRailStatusSeverity.GOOD_SERVICE,
+        }
+        == TIMELINE_SEVERITIES
+    )
