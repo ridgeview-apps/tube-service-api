@@ -57,8 +57,8 @@ async def capture_snapshots_once(
 ) -> int:
     observed_at = now().replace(microsecond=0)
     remote_lines = await tfl_client.get_rail_line_statuses()
-    observed_day = operational_day_for(observed_at)
-    day_start_utc, next_day_start_utc = operational_day_bounds_utc(observed_day)
+    operational_date = operational_day_for(observed_at)
+    day_start_utc, next_day_start_utc = operational_day_bounds_utc(operational_date)
 
     async with session_factory() as session:
         latest_snapshots_by_line = await get_latest_snapshots_by_line(

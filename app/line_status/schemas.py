@@ -30,7 +30,7 @@ class LineStatusSnapshotRead(BaseModel):
 
 class DailyTimelineRead(BaseModel):
     line_id: str
-    date: date
+    operational_date: date
     timezone: str
     starts_at: datetime
     ends_at: datetime
@@ -54,7 +54,7 @@ class LineDisruptionSummaryRead(BaseModel):
 
 
 class DailyDisruptionSummaryRead(BaseModel):
-    date: date
+    operational_date: date
     timezone: str
     starts_at: datetime
     ends_at: datetime

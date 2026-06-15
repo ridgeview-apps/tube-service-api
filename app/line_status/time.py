@@ -16,16 +16,22 @@ def current_operational_day() -> date:
     return operational_day_for(datetime.now(LONDON))
 
 
-def operational_day_bounds_london(day: date) -> tuple[datetime, datetime]:
-    local_start = datetime.combine(day, OPERATIONAL_DAY_START, tzinfo=LONDON)
+def operational_day_bounds_london(
+    operational_date: date,
+) -> tuple[datetime, datetime]:
+    local_start = datetime.combine(
+        operational_date,
+        OPERATIONAL_DAY_START,
+        tzinfo=LONDON,
+    )
     local_end = datetime.combine(
-        day + timedelta(days=1),
+        operational_date + timedelta(days=1),
         OPERATIONAL_DAY_START,
         tzinfo=LONDON,
     )
     return local_start, local_end
 
 
-def operational_day_bounds_utc(day: date) -> tuple[datetime, datetime]:
-    local_start, local_end = operational_day_bounds_london(day)
+def operational_day_bounds_utc(operational_date: date) -> tuple[datetime, datetime]:
+    local_start, local_end = operational_day_bounds_london(operational_date)
     return local_start.astimezone(UTC), local_end.astimezone(UTC)

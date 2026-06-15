@@ -149,12 +149,12 @@ async def test_timeline_returns_only_requested_london_day() -> None:
     ) as client:
         response = await client.get(
             "/v1/line-status/timeline",
-            params={"line_id": "victoria", "date": date(2026, 6, 9).isoformat()},
+            params={"line_id": "victoria", "operational_date": date(2026, 6, 9).isoformat()},
         )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["date"] == "2026-06-09"
+    assert body["operational_date"] == "2026-06-09"
     assert body["starts_at"] == "2026-06-09T04:00:00+01:00"
     assert body["ends_at"] == "2026-06-10T04:00:00+01:00"
     assert len(body["snapshots"]) == 4
@@ -198,21 +198,21 @@ async def test_timeline_defaults_to_current_operational_day() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["date"] == current_operational_day().isoformat()
+    assert response.json()["operational_date"] == current_operational_day().isoformat()
 
 
-async def test_timeline_rejects_future_date() -> None:
+async def test_timeline_rejects_future_operational_date() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
         response = await client.get(
             "/v1/line-status/timeline",
-            params={"line_id": "victoria", "date": "2999-01-01"},
+            params={"line_id": "victoria", "operational_date": "2999-01-01"},
         )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Date cannot be in the future"}
+    assert response.json() == {"detail": "Operational date cannot be in the future"}
 
 
 async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
@@ -262,7 +262,7 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
     ) as client:
         response = await client.get(
             "/v1/line-status/timeline",
-            params={"line_id": "victoria", "date": date(2026, 6, 9).isoformat()},
+            params={"line_id": "victoria", "operational_date": date(2026, 6, 9).isoformat()},
         )
 
     assert response.status_code == 200
@@ -354,12 +354,12 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
     ) as client:
         response = await client.get(
             "/v1/line-status/disruption-summary",
-            params={"date": date(2026, 6, 9).isoformat()},
+            params={"operational_date": date(2026, 6, 9).isoformat()},
         )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["date"] == "2026-06-09"
+    assert body["operational_date"] == "2026-06-09"
     assert body["timezone"] == "Europe/London"
     assert body["starts_at"] == "2026-06-09T04:00:00+01:00"
     assert body["ends_at"] == "2026-06-10T04:00:00+01:00"
@@ -408,7 +408,7 @@ async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
     ) as client:
         response = await client.get(
             "/v1/line-status/disruption-summary",
-            params={"date": date(2026, 6, 9).isoformat()},
+            params={"operational_date": date(2026, 6, 9).isoformat()},
         )
 
     assert response.status_code == 200
@@ -449,11 +449,11 @@ async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> No
     ) as client:
         timeline_response = await client.get(
             "/v1/line-status/timeline",
-            params={"line_id": "district", "date": date(2026, 6, 9).isoformat()},
+            params={"line_id": "district", "operational_date": date(2026, 6, 9).isoformat()},
         )
         summary_response = await client.get(
             "/v1/line-status/disruption-summary",
-            params={"date": date(2026, 6, 9).isoformat()},
+            params={"operational_date": date(2026, 6, 9).isoformat()},
         )
 
     assert timeline_response.status_code == 200
@@ -473,7 +473,7 @@ async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> No
     }
 
 
-async def test_disruption_summary_defaults_to_today_and_rejects_future_date() -> None:
+async def test_disruption_summary_defaults_to_current_and_rejects_future_operational_date() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -481,14 +481,14 @@ async def test_disruption_summary_defaults_to_today_and_rejects_future_date() ->
         today_response = await client.get("/v1/line-status/disruption-summary")
         future_response = await client.get(
             "/v1/line-status/disruption-summary",
-            params={"date": "2999-01-01"},
+            params={"operational_date": "2999-01-01"},
         )
 
     assert today_response.status_code == 200
-    today = current_operational_day()
-    starts_at, ends_at = operational_day_bounds_london(today)
+    operational_date = current_operational_day()
+    starts_at, ends_at = operational_day_bounds_london(operational_date)
     assert today_response.json() == {
-        "date": today.isoformat(),
+        "operational_date": operational_date.isoformat(),
         "timezone": "Europe/London",
         "starts_at": starts_at.isoformat(),
         "ends_at": ends_at.isoformat(),
@@ -502,4 +502,4 @@ async def test_disruption_summary_defaults_to_today_and_rejects_future_date() ->
         },
     }
     assert future_response.status_code == 422
-    assert future_response.json() == {"detail": "Date cannot be in the future"}
+    assert future_response.json() == {"detail": "Operational date cannot be in the future"}

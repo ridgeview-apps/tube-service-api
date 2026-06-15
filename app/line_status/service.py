@@ -24,11 +24,11 @@ from app.line_status.time import (
 )
 
 
-def _daily_cache_ttl_seconds(day: date) -> int:
+def _daily_cache_ttl_seconds(operational_date: date) -> int:
     settings = get_settings()
     return (
         settings.history_cache_today_ttl_seconds
-        if day == current_operational_day()
+        if operational_date == current_operational_day()
         else settings.history_cache_past_ttl_seconds
     )
 
@@ -92,18 +92,18 @@ def _line_status_read(status: LineStatus) -> LineStatusRead:
 async def get_daily_timeline(
     session: AsyncSession,
     line_id: str,
-    day: date,
+    operational_date: date,
 ) -> DailyTimelineRead:
     normalized_line_id = line_id.lower()
     cached_timeline = daily_timeline_cache.get(
         line_id=normalized_line_id,
-        day=day,
+        operational_date=operational_date,
     )
     if cached_timeline is not None:
         return cached_timeline
 
-    start, end = operational_day_bounds_utc(day)
-    local_start, local_end = operational_day_bounds_london(day)
+    start, end = operational_day_bounds_utc(operational_date)
+    local_start, local_end = operational_day_bounds_london(operational_date)
 
     snapshots = await get_line_history(
         session=session,
@@ -113,7 +113,7 @@ async def get_daily_timeline(
     )
     timeline = DailyTimelineRead(
         line_id=normalized_line_id,
-        date=day,
+        operational_date=operational_date,
         timezone=str(LONDON),
         starts_at=local_start,
         ends_at=local_end,
@@ -122,30 +122,30 @@ async def get_daily_timeline(
 
     daily_timeline_cache.set(
         line_id=normalized_line_id,
-        day=day,
+        operational_date=operational_date,
         value=timeline,
-        ttl_seconds=_daily_cache_ttl_seconds(day),
+        ttl_seconds=_daily_cache_ttl_seconds(operational_date),
     )
     return timeline
 
 
 async def get_daily_disruption_summary(
     session: AsyncSession,
-    day: date,
+    operational_date: date,
 ) -> DailyDisruptionSummaryRead:
-    cached_summary = daily_disruption_summary_cache.get(day=day)
+    cached_summary = daily_disruption_summary_cache.get(operational_date=operational_date)
     if cached_summary is not None:
         return cached_summary
 
-    start, end = operational_day_bounds_utc(day)
-    local_start, local_end = operational_day_bounds_london(day)
+    start, end = operational_day_bounds_utc(operational_date)
+    local_start, local_end = operational_day_bounds_london(operational_date)
     disruptions = await get_disruption_summary(
         session=session,
         start=start,
         end=end,
     )
     summary = DailyDisruptionSummaryRead(
-        date=day,
+        operational_date=operational_date,
         timezone=str(LONDON),
         starts_at=local_start,
         ends_at=local_end,
@@ -159,8 +159,8 @@ async def get_daily_disruption_summary(
         },
     )
     daily_disruption_summary_cache.set(
-        day=day,
+        operational_date=operational_date,
         value=summary,
-        ttl_seconds=_daily_cache_ttl_seconds(day),
+        ttl_seconds=_daily_cache_ttl_seconds(operational_date),
     )
     return summary

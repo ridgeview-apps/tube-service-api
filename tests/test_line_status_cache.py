@@ -20,11 +20,11 @@ class FakeClock:
         self.current_time += seconds
 
 
-def _timeline(*, line_id: str, day: date) -> DailyTimelineRead:
-    starts_at, ends_at = operational_day_bounds_london(day)
+def _timeline(*, line_id: str, operational_date: date) -> DailyTimelineRead:
+    starts_at, ends_at = operational_day_bounds_london(operational_date)
     return DailyTimelineRead(
         line_id=line_id,
-        date=day,
+        operational_date=operational_date,
         timezone="Europe/London",
         starts_at=starts_at,
         ends_at=ends_at,
@@ -34,113 +34,115 @@ def _timeline(*, line_id: str, day: date) -> DailyTimelineRead:
 
 def test_stored_timeline_can_be_retrieved() -> None:
     cache = DailyTimelineCache()
-    day = date(2026, 6, 11)
-    timeline = _timeline(line_id="victoria", day=day)
+    operational_date = date(2026, 6, 11)
+    timeline = _timeline(line_id="victoria", operational_date=operational_date)
 
     cache.set(
         line_id="victoria",
-        day=day,
+        operational_date=operational_date,
         value=timeline,
         ttl_seconds=60,
     )
 
-    assert cache.get(line_id="victoria", day=day) == timeline
+    assert cache.get(line_id="victoria", operational_date=operational_date) == timeline
 
 
-def test_line_and_date_are_separate_cache_keys() -> None:
+def test_line_and_operational_date_are_separate_cache_keys() -> None:
     cache = DailyTimelineCache()
-    first_day = date(2026, 6, 10)
-    second_day = date(2026, 6, 11)
-    victoria_timeline = _timeline(line_id="victoria", day=first_day)
-    central_timeline = _timeline(line_id="central", day=first_day)
+    first_operational_date = date(2026, 6, 10)
+    second_operational_date = date(2026, 6, 11)
+    victoria_timeline = _timeline(line_id="victoria", operational_date=first_operational_date)
+    central_timeline = _timeline(line_id="central", operational_date=first_operational_date)
 
     cache.set(
         line_id="victoria",
-        day=first_day,
+        operational_date=first_operational_date,
         value=victoria_timeline,
         ttl_seconds=60,
     )
     cache.set(
         line_id="central",
-        day=first_day,
+        operational_date=first_operational_date,
         value=central_timeline,
         ttl_seconds=60,
     )
 
-    assert cache.get(line_id="victoria", day=first_day) == victoria_timeline
-    assert cache.get(line_id="central", day=first_day) == central_timeline
-    assert cache.get(line_id="victoria", day=second_day) is None
+    assert (
+        cache.get(line_id="victoria", operational_date=first_operational_date) == victoria_timeline
+    )
+    assert cache.get(line_id="central", operational_date=first_operational_date) == central_timeline
+    assert cache.get(line_id="victoria", operational_date=second_operational_date) is None
 
 
 def test_expired_timeline_is_removed() -> None:
     clock = FakeClock()
     cache = DailyTimelineCache(clock=clock)
-    day = date(2026, 6, 11)
+    operational_date = date(2026, 6, 11)
 
     cache.set(
         line_id="victoria",
-        day=day,
-        value=_timeline(line_id="victoria", day=day),
+        operational_date=operational_date,
+        value=_timeline(line_id="victoria", operational_date=operational_date),
         ttl_seconds=60,
     )
     clock.advance(60)
 
-    assert cache.get(line_id="victoria", day=day) is None
+    assert cache.get(line_id="victoria", operational_date=operational_date) is None
 
 
 def test_zero_ttl_does_not_store_timeline() -> None:
     cache = DailyTimelineCache()
-    day = date(2026, 6, 11)
+    operational_date = date(2026, 6, 11)
 
     cache.set(
         line_id="victoria",
-        day=day,
-        value=_timeline(line_id="victoria", day=day),
+        operational_date=operational_date,
+        value=_timeline(line_id="victoria", operational_date=operational_date),
         ttl_seconds=0,
     )
 
-    assert cache.get(line_id="victoria", day=day) is None
+    assert cache.get(line_id="victoria", operational_date=operational_date) is None
 
 
 def test_clear_removes_all_timelines() -> None:
     cache = DailyTimelineCache()
-    day = date(2026, 6, 11)
+    operational_date = date(2026, 6, 11)
 
     cache.set(
         line_id="victoria",
-        day=day,
-        value=_timeline(line_id="victoria", day=day),
+        operational_date=operational_date,
+        value=_timeline(line_id="victoria", operational_date=operational_date),
         ttl_seconds=60,
     )
     cache.clear()
 
-    assert cache.get(line_id="victoria", day=day) is None
+    assert cache.get(line_id="victoria", operational_date=operational_date) is None
 
 
 def test_oldest_timeline_is_evicted_when_cache_is_full() -> None:
     cache = DailyTimelineCache(max_entries=2)
-    day = date(2026, 6, 11)
+    operational_date = date(2026, 6, 11)
 
     for line_id in ("victoria", "central", "jubilee"):
         cache.set(
             line_id=line_id,
-            day=day,
-            value=_timeline(line_id=line_id, day=day),
+            operational_date=operational_date,
+            value=_timeline(line_id=line_id, operational_date=operational_date),
             ttl_seconds=60,
         )
 
-    assert cache.get(line_id="victoria", day=day) is None
-    assert cache.get(line_id="central", day=day) is not None
-    assert cache.get(line_id="jubilee", day=day) is not None
+    assert cache.get(line_id="victoria", operational_date=operational_date) is None
+    assert cache.get(line_id="central", operational_date=operational_date) is not None
+    assert cache.get(line_id="jubilee", operational_date=operational_date) is not None
 
 
-def test_disruption_summary_is_cached_by_date() -> None:
+def test_disruption_summary_is_cached_by_operational_date() -> None:
     cache = DailyDisruptionSummaryCache()
-    first_day = date(2026, 6, 10)
-    second_day = date(2026, 6, 11)
-    starts_at, ends_at = operational_day_bounds_london(first_day)
+    first_operational_date = date(2026, 6, 10)
+    second_operational_date = date(2026, 6, 11)
+    starts_at, ends_at = operational_day_bounds_london(first_operational_date)
     summary = DailyDisruptionSummaryRead(
-        date=first_day,
+        operational_date=first_operational_date,
         timezone="Europe/London",
         starts_at=starts_at,
         ends_at=ends_at,
@@ -158,22 +160,22 @@ def test_disruption_summary_is_cached_by_date() -> None:
         },
     )
 
-    cache.set(day=first_day, value=summary, ttl_seconds=60)
+    cache.set(operational_date=first_operational_date, value=summary, ttl_seconds=60)
 
-    assert cache.get(day=first_day) == summary
-    assert cache.get(day=second_day) is None
+    assert cache.get(operational_date=first_operational_date) == summary
+    assert cache.get(operational_date=second_operational_date) is None
 
 
 def test_expired_disruption_summary_is_removed() -> None:
     clock = FakeClock()
     cache = DailyDisruptionSummaryCache(clock=clock)
-    day = date(2026, 6, 11)
-    starts_at, ends_at = operational_day_bounds_london(day)
+    operational_date = date(2026, 6, 11)
+    starts_at, ends_at = operational_day_bounds_london(operational_date)
 
     cache.set(
-        day=day,
+        operational_date=operational_date,
         value=DailyDisruptionSummaryRead(
-            date=day,
+            operational_date=operational_date,
             timezone="Europe/London",
             starts_at=starts_at,
             ends_at=ends_at,
@@ -189,4 +191,4 @@ def test_expired_disruption_summary_is_removed() -> None:
     )
     clock.advance(60)
 
-    assert cache.get(day=day) is None
+    assert cache.get(operational_date=operational_date) is None

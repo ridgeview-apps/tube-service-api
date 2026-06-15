@@ -17,25 +17,24 @@ router = APIRouter(
 )
 
 
-def _requested_day_or_today(day: date | None) -> date:
-    current_day = current_operational_day()
-    requested_day = day or current_day
-    if requested_day > current_day:
+def _requested_operational_date(value: date | None) -> date:
+    current_date = current_operational_day()
+    requested_operational_date = value or current_date
+    if requested_operational_date > current_date:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Date cannot be in the future",
+            detail="Operational date cannot be in the future",
         )
-    return requested_day
+    return requested_operational_date
 
 
 @router.get("/timeline", response_model=DailyTimelineRead)
 async def daily_line_timeline(
     line_id: Annotated[str, Query(min_length=1, examples=["victoria"])],
     session: Annotated[AsyncSession, Depends(get_session)],
-    day: Annotated[
+    operational_date: Annotated[
         date | None,
         Query(
-            alias="date",
             description="London operational date (04:00-04:00); defaults to current",
         ),
     ] = None,
@@ -43,22 +42,21 @@ async def daily_line_timeline(
     return await get_daily_timeline(
         session=session,
         line_id=line_id,
-        day=_requested_day_or_today(day),
+        operational_date=_requested_operational_date(operational_date),
     )
 
 
 @router.get("/disruption-summary", response_model=DailyDisruptionSummaryRead)
 async def daily_line_disruption_summary(
     session: Annotated[AsyncSession, Depends(get_session)],
-    day: Annotated[
+    operational_date: Annotated[
         date | None,
         Query(
-            alias="date",
             description="London operational date (04:00-04:00); defaults to current",
         ),
     ] = None,
 ) -> DailyDisruptionSummaryRead:
     return await get_daily_disruption_summary(
         session=session,
-        day=_requested_day_or_today(day),
+        operational_date=_requested_operational_date(operational_date),
     )

@@ -86,7 +86,7 @@ Open:
 - API documentation: <http://127.0.0.1:8000/docs>
 - Health check: <http://127.0.0.1:8000/health>
 - Example timeline:
-  <http://127.0.0.1:8000/v1/line-status/timeline?line_id=victoria&date=2026-06-09>
+  <http://127.0.0.1:8000/v1/line-status/timeline?line_id=victoria&operational_date=2026-06-09>
 
 Example authenticated request:
 

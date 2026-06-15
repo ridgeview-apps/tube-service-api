@@ -57,7 +57,7 @@ async def request_timeline(api_key: str | None = None):
     ) as client:
         return await client.get(
             "/v1/line-status/timeline",
-            params={"line_id": "victoria", "date": "2999-01-01"},
+            params={"line_id": "victoria", "operational_date": "2999-01-01"},
             headers=headers,
         )
 
@@ -77,7 +77,7 @@ async def test_line_status_allows_missing_api_key_in_development() -> None:
     response = await request_timeline()
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Date cannot be in the future"}
+    assert response.json() == {"detail": "Operational date cannot be in the future"}
 
 
 async def test_health_remains_public_without_configured_api_key() -> None:

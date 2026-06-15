@@ -31,8 +31,13 @@ class DailyTimelineCache:
         self._max_entries = max_entries
         self._clock = clock
 
-    def get(self, *, line_id: str, day: date) -> DailyTimelineRead | None:
-        key = (line_id, day)
+    def get(
+        self,
+        *,
+        line_id: str,
+        operational_date: date,
+    ) -> DailyTimelineRead | None:
+        key = (line_id, operational_date)
         entry = self._entries.get(key)
         if entry is None:
             return None
@@ -47,7 +52,7 @@ class DailyTimelineCache:
         self,
         *,
         line_id: str,
-        day: date,
+        operational_date: date,
         value: DailyTimelineRead,
         ttl_seconds: int,
     ) -> None:
@@ -55,7 +60,7 @@ class DailyTimelineCache:
             return
 
         self._remove_expired_entries()
-        key = (line_id, day)
+        key = (line_id, operational_date)
         if key not in self._entries and len(self._entries) >= self._max_entries:
             oldest_key = next(iter(self._entries))
             del self._entries[oldest_key]
@@ -88,13 +93,13 @@ class DailyDisruptionSummaryCache:
         self._max_entries = max_entries
         self._clock = clock
 
-    def get(self, *, day: date) -> DailyDisruptionSummaryRead | None:
-        entry = self._entries.get(day)
+    def get(self, *, operational_date: date) -> DailyDisruptionSummaryRead | None:
+        entry = self._entries.get(operational_date)
         if entry is None:
             return None
 
         if entry.expires_at <= self._clock():
-            del self._entries[day]
+            del self._entries[operational_date]
             return None
 
         return entry.value
@@ -102,7 +107,7 @@ class DailyDisruptionSummaryCache:
     def set(
         self,
         *,
-        day: date,
+        operational_date: date,
         value: DailyDisruptionSummaryRead,
         ttl_seconds: int,
     ) -> None:
@@ -110,11 +115,11 @@ class DailyDisruptionSummaryCache:
             return
 
         self._remove_expired_entries()
-        if day not in self._entries and len(self._entries) >= self._max_entries:
-            oldest_day = next(iter(self._entries))
-            del self._entries[oldest_day]
+        if operational_date not in self._entries and len(self._entries) >= self._max_entries:
+            oldest_operational_date = next(iter(self._entries))
+            del self._entries[oldest_operational_date]
 
-        self._entries[day] = _DisruptionSummaryCacheEntry(
+        self._entries[operational_date] = _DisruptionSummaryCacheEntry(
             value=value,
             expires_at=self._clock() + ttl_seconds,
         )
@@ -124,11 +129,13 @@ class DailyDisruptionSummaryCache:
 
     def _remove_expired_entries(self) -> None:
         current_time = self._clock()
-        expired_days = [
-            day for day, entry in self._entries.items() if entry.expires_at <= current_time
+        expired_operational_dates = [
+            operational_date
+            for operational_date, entry in self._entries.items()
+            if entry.expires_at <= current_time
         ]
-        for day in expired_days:
-            del self._entries[day]
+        for operational_date in expired_operational_dates:
+            del self._entries[operational_date]
 
 
 daily_timeline_cache = DailyTimelineCache()
