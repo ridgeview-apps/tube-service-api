@@ -6,6 +6,7 @@ from app.line_status.schemas import (
     DailyTimelineRead,
     LineDisruptionSummaryRead,
 )
+from app.line_status.time import operational_day_bounds_london
 
 
 class FakeClock:
@@ -20,10 +21,13 @@ class FakeClock:
 
 
 def _timeline(*, line_id: str, day: date) -> DailyTimelineRead:
+    starts_at, ends_at = operational_day_bounds_london(day)
     return DailyTimelineRead(
         line_id=line_id,
         date=day,
         timezone="Europe/London",
+        starts_at=starts_at,
+        ends_at=ends_at,
         snapshots=[],
     )
 
@@ -134,9 +138,12 @@ def test_disruption_summary_is_cached_by_date() -> None:
     cache = DailyDisruptionSummaryCache()
     first_day = date(2026, 6, 10)
     second_day = date(2026, 6, 11)
+    starts_at, ends_at = operational_day_bounds_london(first_day)
     summary = DailyDisruptionSummaryRead(
         date=first_day,
         timezone="Europe/London",
+        starts_at=starts_at,
+        ends_at=ends_at,
         lines={
             "circle": LineDisruptionSummaryRead(
                 disrupted=True,
@@ -161,12 +168,15 @@ def test_expired_disruption_summary_is_removed() -> None:
     clock = FakeClock()
     cache = DailyDisruptionSummaryCache(clock=clock)
     day = date(2026, 6, 11)
+    starts_at, ends_at = operational_day_bounds_london(day)
 
     cache.set(
         day=day,
         value=DailyDisruptionSummaryRead(
             date=day,
             timezone="Europe/London",
+            starts_at=starts_at,
+            ends_at=ends_at,
             lines={
                 "circle": LineDisruptionSummaryRead(
                     disrupted=True,

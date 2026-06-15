@@ -2,13 +2,30 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 LONDON = ZoneInfo("Europe/London")
+OPERATIONAL_DAY_START = time(hour=4)
 
 
-def today_in_london() -> date:
-    return datetime.now(LONDON).date()
+def operational_day_for(value: datetime) -> date:
+    local_value = value.astimezone(LONDON)
+    if local_value.timetz().replace(tzinfo=None) < OPERATIONAL_DAY_START:
+        return local_value.date() - timedelta(days=1)
+    return local_value.date()
 
 
-def london_day_bounds_utc(day: date) -> tuple[datetime, datetime]:
-    local_start = datetime.combine(day, time.min, tzinfo=LONDON)
-    local_end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LONDON)
+def current_operational_day() -> date:
+    return operational_day_for(datetime.now(LONDON))
+
+
+def operational_day_bounds_london(day: date) -> tuple[datetime, datetime]:
+    local_start = datetime.combine(day, OPERATIONAL_DAY_START, tzinfo=LONDON)
+    local_end = datetime.combine(
+        day + timedelta(days=1),
+        OPERATIONAL_DAY_START,
+        tzinfo=LONDON,
+    )
+    return local_start, local_end
+
+
+def operational_day_bounds_utc(day: date) -> tuple[datetime, datetime]:
+    local_start, local_end = operational_day_bounds_london(day)
     return local_start.astimezone(UTC), local_end.astimezone(UTC)

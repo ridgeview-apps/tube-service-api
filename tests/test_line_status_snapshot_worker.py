@@ -197,23 +197,23 @@ async def test_disruption_details_count_as_a_change_and_are_stored() -> None:
     assert stored_status.additional_info == "Tickets accepted on buses and National Rail"
 
 
-async def test_first_collection_of_new_london_day_stores_baseline() -> None:
+async def test_first_collection_of_new_operational_day_stores_baseline() -> None:
     client = FakeTflClient([line("victoria")])
 
     previous_day_count = await capture_snapshots_once(
         client,
         session_factory=db_session_factory,
-        now=lambda: datetime(2026, 6, 8, 22, 50, tzinfo=UTC),
+        now=lambda: datetime(2026, 6, 9, 2, 50, tzinfo=UTC),
     )
     new_day_count = await capture_snapshots_once(
         client,
         session_factory=db_session_factory,
-        now=lambda: datetime(2026, 6, 8, 23, 10, tzinfo=UTC),
+        now=lambda: datetime(2026, 6, 9, 3, 10, tzinfo=UTC),
     )
     unchanged_count = await capture_snapshots_once(
         client,
         session_factory=db_session_factory,
-        now=lambda: datetime(2026, 6, 8, 23, 20, tzinfo=UTC),
+        now=lambda: datetime(2026, 6, 9, 3, 20, tzinfo=UTC),
     )
 
     assert previous_day_count == 1

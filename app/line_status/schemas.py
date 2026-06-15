@@ -32,6 +32,8 @@ class DailyTimelineRead(BaseModel):
     line_id: str
     date: date
     timezone: str
+    starts_at: datetime
+    ends_at: datetime
     snapshots: list[LineStatusSnapshotRead]
 
 
@@ -54,4 +56,6 @@ class LineDisruptionSummaryRead(BaseModel):
 class DailyDisruptionSummaryRead(BaseModel):
     date: date
     timezone: str
+    starts_at: datetime
+    ends_at: datetime
     lines: dict[str, LineDisruptionSummaryRead]

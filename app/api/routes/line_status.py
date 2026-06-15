@@ -8,7 +8,7 @@ from app.api.security import require_api_key
 from app.database import get_session
 from app.line_status.schemas import DailyDisruptionSummaryRead, DailyTimelineRead
 from app.line_status.service import get_daily_disruption_summary, get_daily_timeline
-from app.line_status.time import today_in_london
+from app.line_status.time import current_operational_day
 
 router = APIRouter(
     prefix="/v1/line-status",
@@ -18,7 +18,7 @@ router = APIRouter(
 
 
 def _requested_day_or_today(day: date | None) -> date:
-    current_day = today_in_london()
+    current_day = current_operational_day()
     requested_day = day or current_day
     if requested_day > current_day:
         raise HTTPException(
@@ -36,7 +36,7 @@ async def daily_line_timeline(
         date | None,
         Query(
             alias="date",
-            description="London calendar date; defaults to today",
+            description="London operational date (04:00-04:00); defaults to current",
         ),
     ] = None,
 ) -> DailyTimelineRead:
@@ -54,7 +54,7 @@ async def daily_line_disruption_summary(
         date | None,
         Query(
             alias="date",
-            description="London calendar date; defaults to today",
+            description="London operational date (04:00-04:00); defaults to current",
         ),
     ] = None,
 ) -> DailyDisruptionSummaryRead:

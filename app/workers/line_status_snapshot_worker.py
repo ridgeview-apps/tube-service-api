@@ -12,7 +12,7 @@ from app.database import create_tables
 from app.database import session_factory as default_session_factory
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.repository import get_latest_snapshots_by_line
-from app.line_status.time import LONDON, london_day_bounds_utc
+from app.line_status.time import operational_day_bounds_utc, operational_day_for
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,8 +57,8 @@ async def capture_snapshots_once(
 ) -> int:
     observed_at = now().replace(microsecond=0)
     remote_lines = await tfl_client.get_rail_line_statuses()
-    observed_day_in_london = observed_at.astimezone(LONDON).date()
-    day_start_utc, next_day_start_utc = london_day_bounds_utc(observed_day_in_london)
+    observed_day = operational_day_for(observed_at)
+    day_start_utc, next_day_start_utc = operational_day_bounds_utc(observed_day)
 
     async with session_factory() as session:
         latest_snapshots_by_line = await get_latest_snapshots_by_line(

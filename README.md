@@ -2,7 +2,7 @@
 
 A FastAPI service that extends TfL data for the Tube Service mobile app. Its
 first feature records line-status snapshots and exposes them by London
-calendar day.
+operational day.
 
 ## Architecture
 
@@ -17,7 +17,8 @@ There are three deliberately separate parts:
 
 Run the API and snapshot worker as separate processes in production. This prevents
 multiple web workers from accidentally polling and saving duplicate data.
-The first collection of each London day stores a baseline for every line.
+An operational day runs from 04:00 London time to 04:00 the following day.
+The first collection of each operational day stores a baseline for every line.
 Later collections store only changes, so daily history is a simple date-range
 query.
 

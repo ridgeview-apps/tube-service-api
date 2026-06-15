@@ -16,14 +16,19 @@ from app.line_status.schemas import (
     LineStatusSnapshotRead,
 )
 from app.line_status.severity import TIMELINE_SEVERITIES
-from app.line_status.time import LONDON, london_day_bounds_utc, today_in_london
+from app.line_status.time import (
+    LONDON,
+    current_operational_day,
+    operational_day_bounds_london,
+    operational_day_bounds_utc,
+)
 
 
 def _daily_cache_ttl_seconds(day: date) -> int:
     settings = get_settings()
     return (
         settings.history_cache_today_ttl_seconds
-        if day == today_in_london()
+        if day == current_operational_day()
         else settings.history_cache_past_ttl_seconds
     )
 
@@ -97,7 +102,8 @@ async def get_daily_timeline(
     if cached_timeline is not None:
         return cached_timeline
 
-    start, end = london_day_bounds_utc(day)
+    start, end = operational_day_bounds_utc(day)
+    local_start, local_end = operational_day_bounds_london(day)
 
     snapshots = await get_line_history(
         session=session,
@@ -109,6 +115,8 @@ async def get_daily_timeline(
         line_id=normalized_line_id,
         date=day,
         timezone=str(LONDON),
+        starts_at=local_start,
+        ends_at=local_end,
         snapshots=_timeline_snapshots(snapshots),
     )
 
@@ -129,7 +137,8 @@ async def get_daily_disruption_summary(
     if cached_summary is not None:
         return cached_summary
 
-    start, end = london_day_bounds_utc(day)
+    start, end = operational_day_bounds_utc(day)
+    local_start, local_end = operational_day_bounds_london(day)
     disruptions = await get_disruption_summary(
         session=session,
         start=start,
@@ -138,6 +147,8 @@ async def get_daily_disruption_summary(
     summary = DailyDisruptionSummaryRead(
         date=day,
         timezone=str(LONDON),
+        starts_at=local_start,
+        ends_at=local_end,
         lines={
             line_id: LineDisruptionSummaryRead(
                 disrupted=disruptions.get(line_id, (0, None))[0] > 0,

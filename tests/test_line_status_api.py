@@ -10,7 +10,7 @@ from app.database import Base, get_session
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
 from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatus, LineStatusSnapshot
-from app.line_status.time import today_in_london
+from app.line_status.time import current_operational_day, operational_day_bounds_london
 from app.main import app
 
 test_engine = create_async_engine(
@@ -117,6 +117,28 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                         ),
                     ],
                 ),
+                LineStatusSnapshot(
+                    line_id="victoria",
+                    observed_at=datetime(2026, 6, 10, 2, 59, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=9,
+                            status_description="Minor Delays",
+                            reason="Late-night disruption",
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="victoria",
+                    observed_at=datetime(2026, 6, 10, 3, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=6,
+                            status_description="Severe Delays",
+                            reason="Next operational day",
+                        )
+                    ],
+                ),
             ]
         )
         await session.commit()
@@ -133,9 +155,18 @@ async def test_timeline_returns_only_requested_london_day() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["date"] == "2026-06-09"
-    assert len(body["snapshots"]) == 3
-    assert body["snapshots"][0]["statuses"][0]["status_severity_description"] == "Good Service"
-    assert body["snapshots"][1]["statuses"][0] == {
+    assert body["starts_at"] == "2026-06-09T04:00:00+01:00"
+    assert body["ends_at"] == "2026-06-10T04:00:00+01:00"
+    assert len(body["snapshots"]) == 4
+    assert [snapshot["observed_at"] for snapshot in body["snapshots"]] == [
+        "2026-06-10T02:59:00Z",
+        "2026-06-09T10:00:00Z",
+        "2026-06-09T08:00:00Z",
+        "2026-06-09T07:00:00Z",
+    ]
+    assert body["snapshots"][0]["statuses"][0]["status_severity_description"] == "Minor Delays"
+    assert body["snapshots"][1]["statuses"][0]["status_severity_description"] == "Good Service"
+    assert body["snapshots"][2]["statuses"][0] == {
         "status_severity": 6,
         "status_severity_description": "Severe Delays",
         "reason": "Test disruption",
@@ -144,20 +175,19 @@ async def test_timeline_returns_only_requested_london_day() -> None:
             "additional_info": "Tickets accepted on local buses",
         },
     }
-    assert body["snapshots"][2]["statuses"][0]["status_severity_description"] == "Good Service"
-    assert body["snapshots"][0]["statuses"][0]["disruption"] is None
+    assert body["snapshots"][3]["statuses"][0]["status_severity_description"] == "Good Service"
+    assert body["snapshots"][3]["statuses"][0]["disruption"] is None
     assert all(
         status["status_severity"] <= 10
         for snapshot in body["snapshots"]
         for status in snapshot["statuses"]
     )
-    assert body["snapshots"][1]["observed_at"].startswith("2026-06-09T08:00:00")
-    assert body["snapshots"][0]["observed_at"].endswith("Z")
+    assert all(snapshot["observed_at"].endswith("Z") for snapshot in body["snapshots"])
     assert all("line_name" not in snapshot for snapshot in body["snapshots"])
     assert all("mode_name" not in snapshot for snapshot in body["snapshots"])
 
 
-async def test_timeline_defaults_to_today_in_london() -> None:
+async def test_timeline_defaults_to_current_operational_day() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -168,7 +198,7 @@ async def test_timeline_defaults_to_today_in_london() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["date"] == today_in_london().isoformat()
+    assert response.json()["date"] == current_operational_day().isoformat()
 
 
 async def test_timeline_rejects_future_date() -> None:
@@ -331,6 +361,8 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
     body = response.json()
     assert body["date"] == "2026-06-09"
     assert body["timezone"] == "Europe/London"
+    assert body["starts_at"] == "2026-06-09T04:00:00+01:00"
+    assert body["ends_at"] == "2026-06-10T04:00:00+01:00"
     summary = body["lines"]
     assert set(summary) == SUPPORTED_LINE_IDS
     assert summary["circle"]["disrupted"] is True
@@ -453,10 +485,13 @@ async def test_disruption_summary_defaults_to_today_and_rejects_future_date() ->
         )
 
     assert today_response.status_code == 200
-    today = today_in_london()
+    today = current_operational_day()
+    starts_at, ends_at = operational_day_bounds_london(today)
     assert today_response.json() == {
         "date": today.isoformat(),
         "timezone": "Europe/London",
+        "starts_at": starts_at.isoformat(),
+        "ends_at": ends_at.isoformat(),
         "lines": {
             line_id: {
                 "disrupted": False,
