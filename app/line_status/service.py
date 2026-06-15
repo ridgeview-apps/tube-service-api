@@ -14,8 +14,13 @@ from app.line_status.schemas import (
     LineDisruptionSummaryRead,
     LineStatusRead,
     LineStatusSnapshotRead,
+    LineStatusTransition,
 )
-from app.line_status.severity import TIMELINE_SEVERITIES
+from app.line_status.severity import (
+    DISRUPTION_SEVERITIES,
+    TIMELINE_SEVERITIES,
+    TflRailStatusSeverity,
+)
 from app.line_status.time import (
     LONDON,
     current_operational_day,
@@ -57,10 +62,15 @@ def _timeline_snapshots(
         if not statuses or statuses == previous_statuses:
             continue
 
+        transition = _status_transition(
+            previous_statuses=previous_statuses,
+            current_statuses=statuses,
+        )
         timeline.append(
             LineStatusSnapshotRead(
                 line_id=snapshot.line_id,
                 observed_at=snapshot.observed_at,
+                transition=transition,
                 statuses=statuses,
             )
         )
@@ -68,6 +78,36 @@ def _timeline_snapshots(
 
     timeline.reverse()
     return timeline
+
+
+def _status_transition(
+    *,
+    previous_statuses: list[LineStatusRead] | None,
+    current_statuses: list[LineStatusRead],
+) -> LineStatusTransition:
+    if previous_statuses is None:
+        return LineStatusTransition.BASELINE
+
+    previous_disrupted = _statuses_are_disrupted(previous_statuses)
+    current_disrupted = _statuses_are_disrupted(current_statuses)
+    if current_disrupted:
+        return (
+            LineStatusTransition.DISRUPTION_CHANGED
+            if previous_disrupted
+            else LineStatusTransition.DISRUPTION_STARTED
+        )
+
+    current_has_good_service = any(
+        status.status_severity == TflRailStatusSeverity.GOOD_SERVICE for status in current_statuses
+    )
+    if previous_disrupted and current_has_good_service:
+        return LineStatusTransition.SERVICE_RESUMED
+
+    return LineStatusTransition.STATUS_CHANGED
+
+
+def _statuses_are_disrupted(statuses: list[LineStatusRead]) -> bool:
+    return any(status.status_severity in DISRUPTION_SEVERITIES for status in statuses)
 
 
 def _line_status_read(status: LineStatus) -> LineStatusRead:

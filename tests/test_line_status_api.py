@@ -90,7 +90,7 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                         LineStatus(
                             status_severity=6,
                             status_description="Severe Delays",
-                            reason="Test disruption",
+                            reason="Worsened disruption",
                             disruption_category="RealTime",
                             additional_info="Tickets accepted on local buses",
                         ),
@@ -157,16 +157,24 @@ async def test_timeline_returns_only_requested_london_day() -> None:
     assert body["operational_date"] == "2026-06-09"
     assert body["starts_at"] == "2026-06-09T04:00:00+01:00"
     assert body["ends_at"] == "2026-06-10T04:00:00+01:00"
-    assert len(body["snapshots"]) == 4
+    assert len(body["snapshots"]) == 5
     assert [snapshot["observed_at"] for snapshot in body["snapshots"]] == [
         "2026-06-10T02:59:00Z",
         "2026-06-09T10:00:00Z",
+        "2026-06-09T09:00:00Z",
         "2026-06-09T08:00:00Z",
         "2026-06-09T07:00:00Z",
     ]
+    assert [snapshot["transition"] for snapshot in body["snapshots"]] == [
+        "disruption_started",
+        "service_resumed",
+        "disruption_changed",
+        "disruption_started",
+        "baseline",
+    ]
     assert body["snapshots"][0]["statuses"][0]["status_severity_description"] == "Minor Delays"
     assert body["snapshots"][1]["statuses"][0]["status_severity_description"] == "Good Service"
-    assert body["snapshots"][2]["statuses"][0] == {
+    assert body["snapshots"][3]["statuses"][0] == {
         "status_severity": 6,
         "status_severity_description": "Severe Delays",
         "reason": "Test disruption",
@@ -175,8 +183,8 @@ async def test_timeline_returns_only_requested_london_day() -> None:
             "additional_info": "Tickets accepted on local buses",
         },
     }
-    assert body["snapshots"][3]["statuses"][0]["status_severity_description"] == "Good Service"
-    assert body["snapshots"][3]["statuses"][0]["disruption"] is None
+    assert body["snapshots"][4]["statuses"][0]["status_severity_description"] == "Good Service"
+    assert body["snapshots"][4]["statuses"][0]["disruption"] is None
     assert all(
         status["status_severity"] <= 10
         for snapshot in body["snapshots"]
@@ -270,6 +278,10 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
     assert [snapshot["statuses"][0]["status_severity_description"] for snapshot in snapshots] == [
         "Good Service",
         "Severe Delays",
+    ]
+    assert [snapshot["transition"] for snapshot in snapshots] == [
+        "service_resumed",
+        "baseline",
     ]
     assert snapshots[1]["observed_at"].startswith("2026-06-09T08:00:00")
 
@@ -457,6 +469,7 @@ async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> No
         )
 
     assert timeline_response.status_code == 200
+    assert timeline_response.json()["snapshots"][0]["transition"] == "baseline"
     assert timeline_response.json()["snapshots"][0]["statuses"][0] == {
         "status_severity": 4,
         "status_severity_description": "Planned Closure",

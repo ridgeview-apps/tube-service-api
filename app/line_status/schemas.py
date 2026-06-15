@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -15,11 +16,20 @@ class LineStatusRead(BaseModel):
     disruption: DisruptionRead | None
 
 
+class LineStatusTransition(StrEnum):
+    BASELINE = "baseline"
+    DISRUPTION_STARTED = "disruption_started"
+    DISRUPTION_CHANGED = "disruption_changed"
+    SERVICE_RESUMED = "service_resumed"
+    STATUS_CHANGED = "status_changed"
+
+
 class LineStatusSnapshotRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     line_id: str
     observed_at: datetime
+    transition: LineStatusTransition
     statuses: list[LineStatusRead]
 
     @field_validator("observed_at", mode="after")
