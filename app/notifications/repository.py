@@ -4,11 +4,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.notifications.models import NotificationDevice, NotificationPreferences
+from app.notifications.events import NotificationCandidate
+from app.notifications.matching import NotificationDeliveryTarget
+from app.notifications.models import (
+    NotificationDelivery,
+    NotificationDevice,
+    NotificationEvent,
+    NotificationPreferences,
+)
 from app.notifications.schemas import (
     NotificationDeviceRegistration,
     NotificationPreferencesUpdate,
 )
+
+PENDING_DELIVERY_STATUS = "pending"
+SENT_DELIVERY_STATUS = "sent"
+FAILED_DELIVERY_STATUS = "failed"
+SKIPPED_DELIVERY_STATUS = "skipped"
 
 
 def utc_now() -> datetime:
@@ -144,3 +156,118 @@ async def delete_device(session: AsyncSession, device_id: str) -> bool:
     await session.delete(device)
     await session.commit()
     return True
+
+
+async def get_or_create_notification_event(
+    session: AsyncSession,
+    candidate: NotificationCandidate,
+) -> tuple[NotificationEvent, bool]:
+    existing_event = await session.scalar(
+        select(NotificationEvent).where(
+            NotificationEvent.dedupe_key == candidate.dedupe_key,
+        )
+    )
+    if existing_event is not None:
+        return existing_event, False
+
+    event = NotificationEvent(
+        dedupe_key=candidate.dedupe_key,
+        line_id=candidate.line_id,
+        event_type=candidate.event_type.value,
+        observed_at=candidate.observed_at,
+        severity=candidate.severity,
+        status_description=candidate.status_description,
+        reason=candidate.reason,
+        created_at=utc_now(),
+    )
+    session.add(event)
+    await session.commit()
+    await session.refresh(event)
+    return event, True
+
+
+async def create_pending_deliveries(
+    session: AsyncSession,
+    event: NotificationEvent,
+    targets: list[NotificationDeliveryTarget],
+) -> list[NotificationDelivery]:
+    if not targets:
+        return []
+
+    targets_by_device_id = {target.device_id: target for target in targets}
+    existing_device_ids = set(
+        (
+            await session.scalars(
+                select(NotificationDelivery.device_id).where(
+                    NotificationDelivery.event_id == event.id,
+                    NotificationDelivery.device_id.in_(
+                        list(targets_by_device_id),
+                    ),
+                )
+            )
+        ).all()
+    )
+    now = utc_now()
+    deliveries = [
+        NotificationDelivery(
+            event_id=event.id,
+            device_id=target.device_id,
+            platform=target.platform.value,
+            push_token=target.push_token,
+            status=PENDING_DELIVERY_STATUS,
+            provider_message_id=None,
+            failure_reason=None,
+            created_at=now,
+            updated_at=now,
+        )
+        for target in targets_by_device_id.values()
+        if target.device_id not in existing_device_ids
+    ]
+    session.add_all(deliveries)
+    await session.commit()
+    for delivery in deliveries:
+        await session.refresh(delivery)
+    return deliveries
+
+
+async def mark_delivery_sent(
+    session: AsyncSession,
+    delivery: NotificationDelivery,
+    *,
+    provider_message_id: str | None,
+) -> NotificationDelivery:
+    delivery.status = SENT_DELIVERY_STATUS
+    delivery.provider_message_id = provider_message_id
+    delivery.failure_reason = None
+    delivery.updated_at = utc_now()
+    await session.commit()
+    await session.refresh(delivery)
+    return delivery
+
+
+async def mark_delivery_failed(
+    session: AsyncSession,
+    delivery: NotificationDelivery,
+    *,
+    failure_reason: str,
+) -> NotificationDelivery:
+    delivery.status = FAILED_DELIVERY_STATUS
+    delivery.failure_reason = failure_reason
+    delivery.updated_at = utc_now()
+    await session.commit()
+    await session.refresh(delivery)
+    return delivery
+
+
+async def mark_delivery_skipped(
+    session: AsyncSession,
+    delivery: NotificationDelivery,
+    *,
+    failure_reason: str | None = None,
+) -> NotificationDelivery:
+    delivery.status = SKIPPED_DELIVERY_STATUS
+    delivery.failure_reason = failure_reason
+    delivery.updated_at = utc_now()
+    await session.commit()
+    await session.refresh(delivery)
+    return delivery
