@@ -39,6 +39,17 @@ async def get_device(
     return await session.scalar(statement)
 
 
+async def get_notification_devices_with_preferences(
+    session: AsyncSession,
+) -> list[NotificationDevice]:
+    statement = (
+        select(NotificationDevice)
+        .where(NotificationDevice.preferences.has())
+        .options(selectinload(NotificationDevice.preferences))
+    )
+    return list((await session.scalars(statement)).all())
+
+
 async def upsert_device(
     session: AsyncSession,
     device_id: str,

@@ -8,6 +8,13 @@ from sqlalchemy.pool import StaticPool
 from app.clients.tfl import TflLine, TflLineStatus
 from app.database import Base
 from app.line_status.models import LineStatus, LineStatusSnapshot
+from app.notifications.models import (
+    NotificationDelivery,
+    NotificationDevice,
+    NotificationEvent,
+    NotificationPreferences,
+)
+from app.notifications.repository import PENDING_DELIVERY_STATUS
 from app.workers.line_status_snapshot_worker import capture_snapshots_once
 
 test_engine = create_async_engine(
@@ -89,6 +96,53 @@ async def stored_snapshots() -> list[LineStatusSnapshot]:
                 )
             )
         )
+
+
+async def stored_notification_events() -> list[NotificationEvent]:
+    async with db_session_factory() as session:
+        return list(await session.scalars(select(NotificationEvent).order_by(NotificationEvent.id)))
+
+
+async def stored_notification_deliveries() -> list[NotificationDelivery]:
+    async with db_session_factory() as session:
+        return list(
+            await session.scalars(select(NotificationDelivery).order_by(NotificationDelivery.id))
+        )
+
+
+async def add_notification_device(
+    *,
+    device_id: str = "install-123",
+    line_ids: list[str] | None = None,
+    schedule_preset: str = "anytime",
+) -> None:
+    now = datetime(2026, 6, 9, 7, 0, tzinfo=UTC)
+    async with db_session_factory() as session:
+        session.add(
+            NotificationDevice(
+                device_id=device_id,
+                platform="ios",
+                push_token=f"{device_id}-token",
+                enabled=True,
+                app_version=None,
+                created_at=now,
+                updated_at=now,
+                last_seen_at=now,
+                preferences=NotificationPreferences(
+                    device_id=device_id,
+                    enabled=True,
+                    line_ids=line_ids or ["victoria"],
+                    severity_threshold="minor_delays",
+                    notify_recoveries=True,
+                    timezone="Europe/London",
+                    schedule_preset=schedule_preset,
+                    custom_schedules=[],
+                    created_at=now,
+                    updated_at=now,
+                ),
+            )
+        )
+        await session.commit()
 
 
 async def test_observed_at_is_stored_at_second_precision() -> None:
@@ -264,3 +318,86 @@ async def test_first_collection_of_new_operational_day_carries_forward_missing_l
         .status_description
         == "Good Service"
     )
+
+
+async def test_capture_snapshots_creates_pending_notification_delivery_for_disruption() -> None:
+    await add_notification_device()
+    client = FakeTflClient([line("victoria")])
+
+    baseline_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+    )
+    client.lines = [line("victoria", "Severe Delays", "Signal failure")]
+    disruption_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 10, tzinfo=UTC),
+    )
+
+    events = await stored_notification_events()
+    deliveries = await stored_notification_deliveries()
+
+    assert baseline_count == 1
+    assert disruption_count == 1
+    assert len(events) == 1
+    assert events[0].line_id == "victoria"
+    assert events[0].event_type == "disruption_started"
+    assert events[0].severity == 6
+    assert events[0].status_description == "Severe Delays"
+    assert events[0].reason == "Signal failure"
+    assert len(deliveries) == 1
+    assert deliveries[0].event_id == events[0].id
+    assert deliveries[0].device_id == "install-123"
+    assert deliveries[0].push_token == "install-123-token"
+    assert deliveries[0].status == PENDING_DELIVERY_STATUS
+
+
+async def test_capture_snapshots_does_not_create_delivery_for_unmatched_preferences() -> None:
+    await add_notification_device(line_ids=["central"])
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+    )
+    client.lines = [line("victoria", "Severe Delays", "Signal failure")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 10, tzinfo=UTC),
+    )
+
+    events = await stored_notification_events()
+    deliveries = await stored_notification_deliveries()
+
+    assert len(events) == 1
+    assert deliveries == []
+
+
+async def test_capture_snapshots_does_not_duplicate_delivery_for_unchanged_disruption() -> None:
+    await add_notification_device()
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+    )
+    client.lines = [line("victoria", "Severe Delays", "Signal failure")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 10, tzinfo=UTC),
+    )
+    unchanged_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 20, tzinfo=UTC),
+    )
+
+    assert unchanged_count == 0
+    assert len(await stored_notification_events()) == 1
+    assert len(await stored_notification_deliveries()) == 1
