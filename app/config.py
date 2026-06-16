@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     tfl_api_key: str | None = None
     client_api_keys: dict[str, list[SecretStr]] = Field(default_factory=dict)
     poll_interval_seconds: int = Field(default=600, ge=30)
+    notification_delivery_batch_size: int = Field(default=100, ge=1)
+    notification_delivery_poll_interval_seconds: int = Field(default=30, ge=1)
     history_cache_today_ttl_seconds: int = Field(default=120, ge=0)
     history_cache_past_ttl_seconds: int = Field(default=3600, ge=0)
 

@@ -241,6 +241,21 @@ async def create_pending_deliveries(
     return deliveries
 
 
+async def get_pending_deliveries(
+    session: AsyncSession,
+    *,
+    limit: int = 100,
+) -> list[NotificationDelivery]:
+    statement = (
+        select(NotificationDelivery)
+        .where(NotificationDelivery.status == PENDING_DELIVERY_STATUS)
+        .options(selectinload(NotificationDelivery.event))
+        .order_by(NotificationDelivery.created_at, NotificationDelivery.id)
+        .limit(limit)
+    )
+    return list((await session.scalars(statement)).all())
+
+
 async def mark_delivery_sent(
     session: AsyncSession,
     delivery: NotificationDelivery,
