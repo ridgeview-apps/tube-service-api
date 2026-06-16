@@ -47,6 +47,43 @@ async def get_latest_snapshots_by_line(
     return {snapshot.line_id: snapshot for snapshot in snapshots}
 
 
+async def get_latest_snapshots_before(
+    session: AsyncSession,
+    line_ids: list[str],
+    before: datetime,
+) -> dict[str, LineStatusSnapshot]:
+    if not line_ids:
+        return {}
+
+    latest_snapshots = (
+        select(
+            LineStatusSnapshot.line_id,
+            func.max(LineStatusSnapshot.observed_at).label("observed_at"),
+        )
+        .where(
+            LineStatusSnapshot.line_id.in_(line_ids),
+            LineStatusSnapshot.observed_at < before,
+        )
+        .group_by(LineStatusSnapshot.line_id)
+        .subquery()
+    )
+
+    statement = (
+        select(LineStatusSnapshot)
+        .join(
+            latest_snapshots,
+            and_(
+                LineStatusSnapshot.line_id == latest_snapshots.c.line_id,
+                LineStatusSnapshot.observed_at == latest_snapshots.c.observed_at,
+            ),
+        )
+        .options(selectinload(LineStatusSnapshot.statuses))
+    )
+
+    snapshots = (await session.scalars(statement)).all()
+    return {snapshot.line_id: snapshot for snapshot in snapshots}
+
+
 async def get_line_history(
     session: AsyncSession,
     line_id: str,

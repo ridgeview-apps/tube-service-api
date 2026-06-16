@@ -79,6 +79,18 @@ async def latest_stored_snapshot() -> LineStatusSnapshot:
         )
 
 
+async def stored_snapshots() -> list[LineStatusSnapshot]:
+    async with db_session_factory() as session:
+        return list(
+            await session.scalars(
+                select(LineStatusSnapshot).order_by(
+                    LineStatusSnapshot.observed_at,
+                    LineStatusSnapshot.line_id,
+                )
+            )
+        )
+
+
 async def test_observed_at_is_stored_at_second_precision() -> None:
     client = FakeTflClient([line("victoria")])
 
@@ -220,3 +232,35 @@ async def test_first_collection_of_new_operational_day_stores_baseline() -> None
     assert new_day_count == 1
     assert unchanged_count == 0
     assert await stored_snapshot_count() == 2
+
+
+async def test_first_collection_of_new_operational_day_carries_forward_missing_lines() -> None:
+    client = FakeTflClient([line("victoria"), line("central")])
+
+    previous_day_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 2, 50, tzinfo=UTC),
+    )
+    client.lines = [line("victoria")]
+    new_day_count = await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 3, 10, tzinfo=UTC),
+    )
+
+    snapshots = await stored_snapshots()
+    current_day_snapshots = [
+        snapshot for snapshot in snapshots if snapshot.observed_at == datetime(2026, 6, 9, 3, 10)
+    ]
+    current_day_lines = {snapshot.line_id for snapshot in current_day_snapshots}
+
+    assert previous_day_count == 2
+    assert new_day_count == 2
+    assert current_day_lines == {"central", "victoria"}
+    assert (
+        next(snapshot for snapshot in current_day_snapshots if snapshot.line_id == "central")
+        .statuses[0]
+        .status_description
+        == "Good Service"
+    )

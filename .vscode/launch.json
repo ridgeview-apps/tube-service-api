@@ -14,7 +14,7 @@
       "jinja": true
     },
     {
-      "name": "Snapshot Worker",
+      "name": "Snapshot Poller (manual restart)",
       "type": "debugpy",
       "request": "launch",
       "module": "app.workers.line_status_snapshot_worker",
