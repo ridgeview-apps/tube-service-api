@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tube_service
+      POSTGRES_USER: tube_service
+      POSTGRES_PASSWORD: tube_service
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tube_service -d tube_service"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://tube_service:tube_service@db:5432/tube_service
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://tube_service:tube_service@db:5432/tube_service
+      CLIENT_API_KEYS: ${CLIENT_API_KEYS:?Set CLIENT_API_KEYS before starting the API}
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  snapshot-worker:
+    build: .
+    command: ["python", "-m", "app.workers.line_status_snapshot_worker"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://tube_service:tube_service@db:5432/tube_service
+      TFL_API_KEY: ${TFL_API_KEY:-}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-600}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  notification-worker:
+    build: .
+    command: ["python", "-m", "app.workers.notification_delivery_worker"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://tube_service:tube_service@db:5432/tube_service
+      NOTIFICATION_DELIVERY_BATCH_SIZE: ${NOTIFICATION_DELIVERY_BATCH_SIZE:-100}
+      NOTIFICATION_DELIVERY_POLL_INTERVAL_SECONDS: ${NOTIFICATION_DELIVERY_POLL_INTERVAL_SECONDS:-30}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:

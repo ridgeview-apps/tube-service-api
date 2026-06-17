@@ -124,6 +124,35 @@ uv run ruff format --check .
 uv run pytest
 ```
 
+## Production-like local run
+
+Use Docker Compose to rehearse the deployed process shape with PostgreSQL:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Compose starts:
+
+- PostgreSQL
+- a one-shot `alembic upgrade head` migration service
+- the API at <http://127.0.0.1:8000>
+- the line-status snapshot worker
+- the notification delivery worker
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+Remove the local PostgreSQL volume:
+
+```bash
+docker compose down -v
+```
+
 ## Database
 
 Local development defaults to:
@@ -173,6 +202,9 @@ Run migrations before releasing a new version:
 ```bash
 alembic upgrade head
 ```
+
+The Docker image includes `alembic.ini` and the `migrations/` directory, so the
+same image can be used for the web service, workers, and migration command.
 
 Set the same `DATABASE_URL` on all services. Set `TFL_API_KEY` on the snapshot
 worker. Set `CLIENT_API_KEYS` on the web service and distribute the corresponding key to
