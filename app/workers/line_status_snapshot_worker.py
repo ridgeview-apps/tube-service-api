@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.tfl import TflClient, TflLine, TflLineStatus
 from app.config import get_settings
-from app.database import create_tables
 from app.database import session_factory as default_session_factory
 from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatus, LineStatusSnapshot
@@ -42,7 +41,6 @@ def _utc_now() -> datetime:
 
 async def run(*, once: bool = False) -> None:
     settings = get_settings()
-    await create_tables()
     tfl_client = TflClient(settings.tfl_api_key)
 
     try:

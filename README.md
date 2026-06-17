@@ -6,17 +6,21 @@ operational day.
 
 ## Architecture
 
-There are three deliberately separate parts:
+There are four deliberately separate parts:
 
 - **API:** serves saved data to the mobile app.
 - **Snapshot worker:** polls TfL once every 10 minutes and writes a snapshot only
   when a rail line's status changes. Each snapshot contains its complete
   status list. It covers Tube, Elizabeth line, DLR, London Overground, and
   Trams.
+- **Notification delivery worker:** drains pending push notification deliveries.
+  Until APNs is configured, it uses a no-op sender and marks pending deliveries
+  as skipped.
 - **Database:** SQLite locally; use PostgreSQL when deployed.
 
-Run the API and snapshot worker as separate processes in production. This prevents
-multiple web workers from accidentally polling and saving duplicate data.
+Run the API, snapshot worker, and notification delivery worker as separate
+processes in production. This prevents multiple web workers from accidentally
+polling and saving duplicate data.
 An operational day runs from 04:00 London time to 04:00 the following day.
 The first collection of each operational day stores a baseline for every line.
 Later collections store only changes, so daily history is a simple date-range
@@ -37,6 +41,7 @@ prompted.
 ```bash
 uv sync
 cp .env.example .env
+uv run alembic upgrade head
 ```
 
 Start the API:
@@ -81,6 +86,18 @@ Run a single collection for a quick check:
 uv run python -m app.workers.line_status_snapshot_worker --once
 ```
 
+In another terminal, start the notification delivery worker:
+
+```bash
+uv run python -m app.workers.notification_delivery_worker
+```
+
+Run a single notification delivery batch:
+
+```bash
+uv run python -m app.workers.notification_delivery_worker --once
+```
+
 Open:
 
 - API documentation: <http://127.0.0.1:8000/docs>
@@ -121,9 +138,18 @@ For production, provision PostgreSQL and set `DATABASE_URL` in this form:
 postgresql+asyncpg://USER:PASSWORD@HOST:5432/DATABASE
 ```
 
-The app currently creates its table on startup. Before evolving the schema
-after launch, add Alembic migrations so deployments can change existing
-databases safely.
+Apply database migrations before starting the API or workers:
+
+```bash
+uv run alembic upgrade head
+```
+
+Create future migrations after model changes:
+
+```bash
+uv run alembic revision --autogenerate -m "Describe the schema change"
+uv run alembic upgrade head
+```
 
 ## Deployment shape
 
@@ -131,14 +157,26 @@ Choose a host that supports:
 
 - A managed PostgreSQL database
 - One web service using the Dockerfile's default command
-- One continuously running worker using:
+- One continuously running snapshot worker using:
 
 ```bash
 python -m app.workers.line_status_snapshot_worker
 ```
+- One continuously running notification delivery worker using:
 
-Set the same `DATABASE_URL` and `TFL_API_KEY` on both services. Set
-`CLIENT_API_KEYS` on the web service and distribute the corresponding key to
+```bash
+python -m app.workers.notification_delivery_worker
+```
+
+Run migrations before releasing a new version:
+
+```bash
+alembic upgrade head
+```
+
+Set the same `DATABASE_URL` on all services. Set `TFL_API_KEY` on the snapshot
+worker. Set `CLIENT_API_KEYS` on the web service and distribute the corresponding key to
 each authorized client. The API is stateless, so it can later scale
 horizontally; keep exactly one snapshot worker instance unless database-level
-coordination is added.
+coordination is added. The notification delivery worker is idempotent around
+delivery rows, but run one instance until row-level claiming is added.

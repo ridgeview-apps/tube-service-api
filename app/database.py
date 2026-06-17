@@ -26,5 +26,6 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 async def create_tables() -> None:
+    """Create tables from metadata for isolated tests and local scratch databases."""
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

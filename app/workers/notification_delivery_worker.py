@@ -5,7 +5,6 @@ import sys
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
-from app.database import create_tables
 from app.database import session_factory as default_session_factory
 from app.notifications.sender import NoopPushSender, PushSender, process_pending_deliveries
 
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 async def run(*, once: bool = False) -> None:
     settings = get_settings()
-    await create_tables()
     sender = NoopPushSender()
 
     while True:
