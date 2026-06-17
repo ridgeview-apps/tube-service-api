@@ -23,12 +23,17 @@ from app.notifications.repository import (
     get_notification_devices_with_preferences,
     get_or_create_notification_event,
 )
+from app.operations.repository import (
+    record_worker_failure,
+    record_worker_success,
+)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+WORKER_NAME = "line_status_snapshot_worker"
 
 
 type _StatusValue = tuple[int, str, str | None, str | None, str | None]
@@ -64,6 +69,37 @@ async def capture_snapshots_once(
     *,
     session_factory: async_sessionmaker[AsyncSession] = default_session_factory,
     now: Callable[[], datetime] = _utc_now,
+) -> int:
+    started_at = _utc_now()
+    try:
+        stored_snapshot_count = await _capture_snapshots_once(
+            tfl_client,
+            session_factory=session_factory,
+            now=now,
+        )
+    except Exception as error:
+        await record_worker_failure(
+            session_factory=session_factory,
+            worker_name=WORKER_NAME,
+            started_at=started_at,
+            error=error,
+        )
+        raise
+
+    await record_worker_success(
+        session_factory=session_factory,
+        worker_name=WORKER_NAME,
+        started_at=started_at,
+        processed_count=stored_snapshot_count,
+    )
+    return stored_snapshot_count
+
+
+async def _capture_snapshots_once(
+    tfl_client: TflClient,
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    now: Callable[[], datetime],
 ) -> int:
     observed_at = now().replace(microsecond=0)
     remote_lines = await tfl_client.get_rail_line_statuses()

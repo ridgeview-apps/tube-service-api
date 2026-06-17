@@ -15,6 +15,7 @@ from app.notifications.models import (
     NotificationPreferences,
 )
 from app.notifications.repository import PENDING_DELIVERY_STATUS
+from app.operations.models import WorkerRun
 from app.workers.line_status_snapshot_worker import capture_snapshots_once
 
 test_engine = create_async_engine(
@@ -30,6 +31,11 @@ class FakeTflClient:
 
     async def get_rail_line_statuses(self) -> list[TflLine]:
         return self.lines
+
+
+class FailingTflClient:
+    async def get_rail_line_statuses(self) -> list[TflLine]:
+        raise RuntimeError("TfL is unavailable")
 
 
 def line(
@@ -110,6 +116,11 @@ async def stored_notification_deliveries() -> list[NotificationDelivery]:
         )
 
 
+async def stored_worker_runs() -> list[WorkerRun]:
+    async with db_session_factory() as session:
+        return list(await session.scalars(select(WorkerRun).order_by(WorkerRun.id)))
+
+
 async def add_notification_device(
     *,
     device_id: str = "install-123",
@@ -187,6 +198,37 @@ async def test_capture_snapshots_once_only_stores_changed_lines() -> None:
     assert changed_count == 1
     assert await stored_snapshot_count() == 3
     assert await stored_status_count() == 3
+
+
+async def test_capture_snapshots_once_records_successful_worker_run() -> None:
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+    )
+
+    [worker_run] = await stored_worker_runs()
+    assert worker_run.worker_name == "line_status_snapshot_worker"
+    assert worker_run.status == "success"
+    assert worker_run.processed_count == 1
+    assert worker_run.error_message is None
+
+
+async def test_capture_snapshots_once_records_failed_worker_run() -> None:
+    with pytest.raises(RuntimeError, match="TfL is unavailable"):
+        await capture_snapshots_once(
+            FailingTflClient(),
+            session_factory=db_session_factory,
+            now=lambda: datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+        )
+
+    [worker_run] = await stored_worker_runs()
+    assert worker_run.worker_name == "line_status_snapshot_worker"
+    assert worker_run.status == "failed"
+    assert worker_run.processed_count == 0
+    assert worker_run.error_message == "TfL is unavailable"
 
 
 async def test_status_order_does_not_count_as_a_change() -> None:

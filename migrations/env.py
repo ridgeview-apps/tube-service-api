@@ -14,6 +14,7 @@ from app.database import Base
 # Import models so SQLAlchemy metadata contains every mapped table.
 from app.line_status import models as line_status_models  # noqa: F401
 from app.notifications import models as notification_models  # noqa: F401
+from app.operations import models as operation_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

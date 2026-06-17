@@ -98,6 +98,14 @@ Run a single notification delivery batch:
 uv run python -m app.workers.notification_delivery_worker --once
 ```
 
+Check the latest worker runs:
+
+```bash
+curl \
+  -H "X-API-Key: ios.$IOS_API_KEY" \
+  "http://127.0.0.1:8000/v1/operations/workers"
+```
+
 Open:
 
 - API documentation: <http://127.0.0.1:8000/docs>

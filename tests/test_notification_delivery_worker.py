@@ -16,7 +16,8 @@ from app.notifications.repository import (
     get_or_create_notification_event,
 )
 from app.notifications.schemas import PushPlatform
-from app.notifications.sender import NoopPushSender
+from app.notifications.sender import NoopPushSender, PushSendResult
+from app.operations.models import WorkerRun
 from app.workers.notification_delivery_worker import process_pending_deliveries_once
 
 test_engine = create_async_engine(
@@ -71,6 +72,16 @@ async def stored_deliveries() -> list[NotificationDelivery]:
         )
 
 
+async def stored_worker_runs() -> list[WorkerRun]:
+    async with db_session_factory() as session:
+        return list(await session.scalars(select(WorkerRun).order_by(WorkerRun.id)))
+
+
+class FailingPushSender:
+    async def send(self, *, delivery, event) -> PushSendResult:
+        raise RuntimeError("APNs is unavailable")
+
+
 async def test_process_pending_deliveries_once_uses_noop_sender() -> None:
     await create_pending_delivery_batch(["install-1"])
 
@@ -83,6 +94,11 @@ async def test_process_pending_deliveries_once_uses_noop_sender() -> None:
     assert processed_count == 1
     assert delivery.status == SKIPPED_DELIVERY_STATUS
     assert delivery.failure_reason == "Push sender is not configured"
+    [worker_run] = await stored_worker_runs()
+    assert worker_run.worker_name == "notification_delivery_worker"
+    assert worker_run.status == "success"
+    assert worker_run.processed_count == 1
+    assert worker_run.error_message is None
 
 
 async def test_process_pending_deliveries_once_respects_limit() -> None:
@@ -100,3 +116,19 @@ async def test_process_pending_deliveries_once_respects_limit() -> None:
         SKIPPED_DELIVERY_STATUS,
         PENDING_DELIVERY_STATUS,
     ]
+
+
+async def test_process_pending_deliveries_once_records_failed_worker_run() -> None:
+    await create_pending_delivery_batch(["install-1"])
+
+    with pytest.raises(RuntimeError, match="APNs is unavailable"):
+        await process_pending_deliveries_once(
+            sender=FailingPushSender(),
+            session_factory=db_session_factory,
+        )
+
+    [worker_run] = await stored_worker_runs()
+    assert worker_run.worker_name == "notification_delivery_worker"
+    assert worker_run.status == "failed"
+    assert worker_run.processed_count == 0
+    assert worker_run.error_message == "APNs is unavailable"
