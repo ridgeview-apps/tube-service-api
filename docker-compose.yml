@@ -44,7 +44,7 @@ services:
       APP_ENV: production
       DATABASE_URL: postgresql+asyncpg://tube_service:tube_service@db:5432/tube_service
       TFL_API_KEY: ${TFL_API_KEY:-}
-      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-600}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-900}
     depends_on:
       migrate:
         condition: service_completed_successfully
