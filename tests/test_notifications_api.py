@@ -3,9 +3,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.api.routes.notifications import get_push_sender
 from app.api.security import require_api_key
+from app.config import Settings, get_settings
 from app.database import Base, get_session
 from app.main import app
+from app.notifications.sender import PushSendResult, PushSendStatus
 
 test_engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -21,6 +24,20 @@ async def get_test_session():
 
 async def bypass_api_key() -> None:
     pass
+
+
+class FakePushSender:
+    def __init__(self) -> None:
+        self.delivery_device_ids: list[str] = []
+        self.event_types: list[str] = []
+
+    async def send(self, *, delivery, event) -> PushSendResult:
+        self.delivery_device_ids.append(delivery.device_id)
+        self.event_types.append(event.event_type)
+        return PushSendResult(
+            status=PushSendStatus.SENT,
+            provider_message_id="test-apns-id",
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -234,3 +251,43 @@ async def test_deletes_notification_device() -> None:
 
     assert delete_response.status_code == 204
     assert read_response.status_code == 404
+
+
+async def test_test_push_endpoint_is_gated_by_setting() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.post("/v1/notification-devices/install-123/test-push")
+
+    assert response.status_code == 404
+
+
+async def test_sends_test_push_to_known_ios_device() -> None:
+    fake_sender = FakePushSender()
+    app.dependency_overrides[get_settings] = lambda: Settings(apns_test_push_enabled=True)
+    app.dependency_overrides[get_push_sender] = lambda: fake_sender
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.post("/v1/notification-devices/install-123/test-push")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "device_id": "install-123",
+        "status": "sent",
+        "provider_message_id": "test-apns-id",
+        "failure_reason": None,
+    }
+    assert fake_sender.delivery_device_ids == ["install-123"]
+    assert fake_sender.event_types == ["test"]

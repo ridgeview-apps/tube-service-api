@@ -11,6 +11,7 @@ from app.notifications.repository import (
     mark_delivery_sent,
     mark_delivery_skipped,
 )
+from app.notifications.schemas import PushPlatform
 
 
 class PushSendStatus(StrEnum):
@@ -49,6 +50,18 @@ class NoopPushSender:
         )
 
 
+def build_configured_push_sender(settings: object) -> PushSender:
+    from app.config import Settings
+    from app.notifications.apns import APNsConfig, APNsPushSender
+
+    if not isinstance(settings, Settings):
+        return NoopPushSender()
+    config = APNsConfig.from_settings(settings)
+    if config is None:
+        return NoopPushSender()
+    return APNsPushSender(config=config)
+
+
 async def process_pending_deliveries(
     *,
     session: AsyncSession,
@@ -59,6 +72,14 @@ async def process_pending_deliveries(
     processed_count = 0
 
     for delivery in deliveries:
+        if delivery.platform != PushPlatform.IOS.value:
+            await mark_delivery_skipped(
+                session,
+                delivery,
+                failure_reason="Unsupported push platform",
+            )
+            processed_count += 1
+            continue
         result = await sender.send(delivery=delivery, event=delivery.event)
         match result.status:
             case PushSendStatus.SENT:

@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
 from app.database import session_factory as default_session_factory
-from app.notifications.sender import NoopPushSender, PushSender, process_pending_deliveries
+from app.notifications.sender import (
+    PushSender,
+    build_configured_push_sender,
+    process_pending_deliveries,
+)
 from app.operations.repository import (
     record_worker_failure,
     record_worker_success,
@@ -23,7 +27,7 @@ WORKER_NAME = "notification_delivery_worker"
 
 async def run(*, once: bool = False) -> None:
     settings = get_settings()
-    sender = NoopPushSender()
+    sender = build_configured_push_sender(settings)
 
     while True:
         try:

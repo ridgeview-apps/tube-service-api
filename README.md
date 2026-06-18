@@ -14,8 +14,8 @@ There are four deliberately separate parts:
   status list. It covers Tube, Elizabeth line, DLR, London Overground, and
   Trams.
 - **Notification delivery worker:** drains pending push notification deliveries.
-  Until APNs is configured, it uses a no-op sender and marks pending deliveries
-  as skipped.
+  When APNs is configured, it sends iOS pushes; otherwise it uses a no-op sender
+  and marks pending deliveries as skipped.
 - **Database:** SQLite locally; use PostgreSQL when deployed.
 
 Run the API, snapshot worker, and notification delivery worker as separate
@@ -97,6 +97,33 @@ Run a single notification delivery batch:
 ```bash
 uv run python -m app.workers.notification_delivery_worker --once
 ```
+
+APNs is optional locally. When these variables are present, the notification
+delivery worker uses APNs for iOS deliveries:
+
+```env
+APNS_TEAM_ID=apple-developer-team-id
+APNS_KEY_ID=apple-auth-key-id
+APNS_BUNDLE_ID=ios-app-bundle-id
+APNS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+APNS_USE_SANDBOX=true
+APNS_TEST_PUSH_ENABLED=false
+```
+
+`APNS_PRIVATE_KEY` accepts escaped newlines. Do not commit APNs keys, push
+tokens, or provider secrets.
+
+A gated test endpoint can send a push to any known iOS notification device:
+
+```bash
+curl \
+  -X POST \
+  -H "X-API-Key: ios.$IOS_API_KEY" \
+  "http://127.0.0.1:8000/v1/notification-devices/install-123/test-push"
+```
+
+The endpoint returns 404 unless `APNS_TEST_PUSH_ENABLED=true`; it still requires
+the normal API key.
 
 Check the latest worker runs:
 
@@ -216,10 +243,13 @@ same image can be used for the web service, workers, and migration command.
 
 Set the same `DATABASE_URL` on all services. Set `TFL_API_KEY` on the snapshot
 worker. Set `CLIENT_API_KEYS` on the web service and distribute the corresponding key to
-each authorized client. The API is stateless, so it can later scale
-horizontally; keep exactly one snapshot worker instance unless database-level
-coordination is added. The notification delivery worker is idempotent around
-delivery rows, but run one instance until row-level claiming is added.
+each authorized client. Set the APNs variables on the notification delivery
+worker before deploying it. Set `APNS_TEST_PUSH_ENABLED=true` on the API only
+while manually verifying push setup, then turn it off again. The API is
+stateless, so it can later scale horizontally; keep exactly one snapshot worker
+instance unless database-level coordination is added. The notification delivery
+worker is idempotent around delivery rows, but run one instance until row-level
+claiming is added.
 
 ## Railway deployment
 
@@ -228,9 +258,7 @@ The current production deployment uses Railway with:
 - One PostgreSQL database service
 - One API service built from the Dockerfile
 - One snapshot worker service built from the same Dockerfile
-
-The notification delivery worker is intentionally not deployed yet because APNs
-is not configured. Deploy it after adding a real push sender.
+- One notification delivery worker service built from the same Dockerfile
 
 API service:
 
@@ -238,6 +266,7 @@ API service:
 APP_ENV=production
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DATABASE
 CLIENT_API_KEYS={"ios":["generated-production-secret"]}
+APNS_TEST_PUSH_ENABLED=false
 ```
 
 The API service uses the Dockerfile default command:
@@ -259,6 +288,26 @@ The snapshot worker start command is:
 
 ```bash
 python -m app.workers.line_status_snapshot_worker
+```
+
+Notification delivery worker service:
+
+```env
+APP_ENV=production
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DATABASE
+NOTIFICATION_DELIVERY_BATCH_SIZE=100
+NOTIFICATION_DELIVERY_POLL_INTERVAL_SECONDS=30
+APNS_TEAM_ID=apple-developer-team-id
+APNS_KEY_ID=apple-auth-key-id
+APNS_BUNDLE_ID=ios-app-bundle-id
+APNS_PRIVATE_KEY=escaped-apple-private-key
+APNS_USE_SANDBOX=false
+```
+
+The notification delivery worker start command is:
+
+```bash
+python -m app.workers.notification_delivery_worker
 ```
 
 Railway deploy settings:

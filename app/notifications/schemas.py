@@ -120,3 +120,10 @@ class NotificationPreferencesRead(NotificationPreferencesUpdate):
     device_id: str
     created_at: datetime
     updated_at: datetime
+
+
+class NotificationTestPushRead(BaseModel):
+    device_id: str
+    status: str
+    provider_message_id: str | None = None
+    failure_reason: str | None = None
