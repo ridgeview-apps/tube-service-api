@@ -9,7 +9,7 @@ operational day.
 There are four deliberately separate parts:
 
 - **API:** serves saved data to the mobile app.
-- **Snapshot worker:** polls TfL once every 10 minutes and writes a snapshot only
+- **Snapshot worker:** polls TfL once every 15 minutes and writes a snapshot only
   when a rail line's status changes. Each snapshot contains its complete
   status list. It covers Tube, Elizabeth line, DLR, London Overground, and
   Trams.
@@ -220,3 +220,56 @@ each authorized client. The API is stateless, so it can later scale
 horizontally; keep exactly one snapshot worker instance unless database-level
 coordination is added. The notification delivery worker is idempotent around
 delivery rows, but run one instance until row-level claiming is added.
+
+## Railway deployment
+
+The current production deployment uses Railway with:
+
+- One PostgreSQL database service
+- One API service built from the Dockerfile
+- One snapshot worker service built from the same Dockerfile
+
+The notification delivery worker is intentionally not deployed yet because APNs
+is not configured. Deploy it after adding a real push sender.
+
+API service:
+
+```env
+APP_ENV=production
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DATABASE
+CLIENT_API_KEYS={"ios":["generated-production-secret"]}
+```
+
+The API service uses the Dockerfile default command:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Snapshot worker service:
+
+```env
+APP_ENV=production
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DATABASE
+TFL_API_KEY=generated-tfl-api-key
+POLL_INTERVAL_SECONDS=900
+```
+
+The snapshot worker start command is:
+
+```bash
+python -m app.workers.line_status_snapshot_worker
+```
+
+Railway deploy settings:
+
+- Enable auto-deploys from GitHub.
+- Enable **Wait for CI** on the API and snapshot worker services.
+- Run migrations before deployment with:
+
+```bash
+alembic upgrade head
+```
+
+Do not store production secrets in the repository. Configure them only as
+Railway service variables.
