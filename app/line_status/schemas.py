@@ -47,25 +47,9 @@ class DailyTimelineRead(BaseModel):
     snapshots: list[LineStatusSnapshotRead]
 
 
-class LineDisruptionSummaryRead(BaseModel):
-    disrupted: bool
-    disruption_count: int
-    latest_disruption_at: datetime | None
-
-    @field_validator("latest_disruption_at", mode="after")
-    @classmethod
-    def mark_sqlite_disruption_timestamps_as_utc(
-        cls,
-        value: datetime | None,
-    ) -> datetime | None:
-        if value is None or value.tzinfo is not None:
-            return value
-        return value.replace(tzinfo=UTC)
-
-
 class DailyDisruptionSummaryRead(BaseModel):
     operational_date: date
     timezone: str
     starts_at: datetime
     ends_at: datetime
-    lines: dict[str, LineDisruptionSummaryRead]
+    lines: dict[str, list[LineStatusSnapshotRead]]

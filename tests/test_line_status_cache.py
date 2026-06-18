@@ -4,7 +4,9 @@ from app.line_status.cache import DailyDisruptionSummaryCache, DailyTimelineCach
 from app.line_status.schemas import (
     DailyDisruptionSummaryRead,
     DailyTimelineRead,
-    LineDisruptionSummaryRead,
+    LineStatusRead,
+    LineStatusSnapshotRead,
+    LineStatusTransition,
 )
 from app.line_status.time import operational_day_bounds_london
 
@@ -29,6 +31,22 @@ def _timeline(*, line_id: str, operational_date: date) -> DailyTimelineRead:
         starts_at=starts_at,
         ends_at=ends_at,
         snapshots=[],
+    )
+
+
+def _disruption_snapshot(*, line_id: str, observed_at: datetime) -> LineStatusSnapshotRead:
+    return LineStatusSnapshotRead(
+        line_id=line_id,
+        observed_at=observed_at,
+        transition=LineStatusTransition.DISRUPTION_STARTED,
+        statuses=[
+            LineStatusRead(
+                status_severity=9,
+                status_severity_description="Minor Delays",
+                reason="Signal failure",
+                disruption=None,
+            )
+        ],
     )
 
 
@@ -147,16 +165,13 @@ def test_disruption_summary_is_cached_by_operational_date() -> None:
         starts_at=starts_at,
         ends_at=ends_at,
         lines={
-            "circle": LineDisruptionSummaryRead(
-                disrupted=True,
-                disruption_count=1,
-                latest_disruption_at=datetime(2026, 6, 10, 8, 0, tzinfo=UTC),
-            ),
-            "northern": LineDisruptionSummaryRead(
-                disrupted=False,
-                disruption_count=0,
-                latest_disruption_at=None,
-            ),
+            "circle": [
+                _disruption_snapshot(
+                    line_id="circle",
+                    observed_at=datetime(2026, 6, 10, 8, 0, tzinfo=UTC),
+                )
+            ],
+            "northern": [],
         },
     )
 
@@ -180,11 +195,12 @@ def test_expired_disruption_summary_is_removed() -> None:
             starts_at=starts_at,
             ends_at=ends_at,
             lines={
-                "circle": LineDisruptionSummaryRead(
-                    disrupted=True,
-                    disruption_count=1,
-                    latest_disruption_at=datetime(2026, 6, 11, 8, 0, tzinfo=UTC),
-                )
+                "circle": [
+                    _disruption_snapshot(
+                        line_id="circle",
+                        observed_at=datetime(2026, 6, 11, 8, 0, tzinfo=UTC),
+                    )
+                ]
             },
         ),
         ttl_seconds=60,

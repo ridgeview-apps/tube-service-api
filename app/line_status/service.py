@@ -6,12 +6,11 @@ from app.config import get_settings
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
 from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatus, LineStatusSnapshot
-from app.line_status.repository import get_disruption_summary, get_line_history
+from app.line_status.repository import get_line_histories, get_line_history
 from app.line_status.schemas import (
     DailyDisruptionSummaryRead,
     DailyTimelineRead,
     DisruptionRead,
-    LineDisruptionSummaryRead,
     LineStatusRead,
     LineStatusSnapshotRead,
     LineStatusTransition,
@@ -78,6 +77,20 @@ def _timeline_snapshots(
 
     timeline.reverse()
     return timeline
+
+
+def _disruption_started_snapshots(
+    snapshots: list[LineStatusSnapshot],
+) -> list[LineStatusSnapshotRead]:
+    return [
+        snapshot
+        for snapshot in _timeline_snapshots(snapshots)
+        if snapshot.transition == LineStatusTransition.DISRUPTION_STARTED
+        or (
+            snapshot.transition == LineStatusTransition.BASELINE
+            and _statuses_are_disrupted(snapshot.statuses)
+        )
+    ]
 
 
 def _status_transition(
@@ -179,7 +192,7 @@ async def get_daily_disruption_summary(
 
     start, end = operational_day_bounds_utc(operational_date)
     local_start, local_end = operational_day_bounds_london(operational_date)
-    disruptions = await get_disruption_summary(
+    histories = await get_line_histories(
         session=session,
         start=start,
         end=end,
@@ -190,11 +203,7 @@ async def get_daily_disruption_summary(
         starts_at=local_start,
         ends_at=local_end,
         lines={
-            line_id: LineDisruptionSummaryRead(
-                disrupted=disruptions.get(line_id, (0, None))[0] > 0,
-                disruption_count=disruptions.get(line_id, (0, None))[0],
-                latest_disruption_at=disruptions.get(line_id, (0, None))[1],
-            )
+            line_id: _disruption_started_snapshots(histories.get(line_id, []))
             for line_id in sorted(SUPPORTED_LINE_IDS)
         },
     )

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 from app.line_status import service
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
 from app.line_status.lines import SUPPORTED_LINE_IDS
+from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.schemas import LineStatusRead, LineStatusTransition
 
 
@@ -71,11 +72,36 @@ async def test_daily_timeline_is_cached_by_line_and_operational_date(monkeypatch
 
 
 async def test_daily_disruption_summary_is_cached_by_operational_date(monkeypatch) -> None:
-    disruption_at = datetime(2026, 6, 9, 8, 0, tzinfo=UTC)
-    get_disruption_summary = AsyncMock(
-        return_value={"circle": (2, disruption_at), "northern": (0, None)}
+    get_line_histories = AsyncMock(
+        return_value={
+            "circle": [
+                LineStatusSnapshot(
+                    line_id="circle",
+                    observed_at=datetime(2026, 6, 9, 9, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=9,
+                            status_description="Minor Delays",
+                            reason="Signal failure",
+                        )
+                    ],
+                ),
+                LineStatusSnapshot(
+                    line_id="circle",
+                    observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+                    statuses=[
+                        LineStatus(
+                            status_severity=10,
+                            status_description="Good Service",
+                            reason=None,
+                        )
+                    ],
+                ),
+            ],
+            "northern": [],
+        }
     )
-    monkeypatch.setattr(service, "get_disruption_summary", get_disruption_summary)
+    monkeypatch.setattr(service, "get_line_histories", get_line_histories)
     daily_disruption_summary_cache.clear()
 
     requested_operational_date = date(2026, 6, 9)
@@ -91,15 +117,13 @@ async def test_daily_disruption_summary_is_cached_by_operational_date(monkeypatc
     )
 
     assert first_result == second_result
-    assert get_disruption_summary.await_count == 1
+    assert get_line_histories.await_count == 1
     assert first_result.operational_date == requested_operational_date
     assert first_result.timezone == "Europe/London"
     assert set(first_result.lines) == SUPPORTED_LINE_IDS
-    assert first_result.lines["circle"].disrupted
-    assert first_result.lines["circle"].disruption_count == 2
-    assert first_result.lines["circle"].latest_disruption_at == disruption_at
-    assert not first_result.lines["northern"].disrupted
-    assert first_result.lines["northern"].disruption_count == 0
-    assert first_result.lines["northern"].latest_disruption_at is None
+    assert len(first_result.lines["circle"]) == 1
+    assert first_result.lines["circle"][0].observed_at == datetime(2026, 6, 9, 9, 0, tzinfo=UTC)
+    assert first_result.lines["circle"][0].transition == LineStatusTransition.DISRUPTION_STARTED
+    assert first_result.lines["northern"] == []
 
     daily_disruption_summary_cache.clear()

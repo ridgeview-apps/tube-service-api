@@ -286,7 +286,7 @@ async def test_timeline_ignores_unrelated_status_only_snapshots() -> None:
     assert snapshots[1]["observed_at"].startswith("2026-06-09T08:00:00")
 
 
-async def test_disruption_summary_reports_any_disruption_for_each_line() -> None:
+async def test_disruption_summary_reports_disruption_starts_for_each_line() -> None:
     async with db_session_factory() as session:
         session.add_all(
             [
@@ -377,19 +377,20 @@ async def test_disruption_summary_reports_any_disruption_for_each_line() -> None
     assert body["ends_at"] == "2026-06-10T04:00:00+01:00"
     summary = body["lines"]
     assert set(summary) == SUPPORTED_LINE_IDS
-    assert summary["circle"]["disrupted"] is True
-    assert summary["circle"]["disruption_count"] == 2
-    assert summary["circle"]["latest_disruption_at"] == "2026-06-09T11:00:00Z"
-    assert summary["northern"]["disrupted"] is False
-    assert summary["northern"]["disruption_count"] == 0
-    assert summary["northern"]["latest_disruption_at"] is None
-    assert all(
-        not item["disrupted"]
-        and item["disruption_count"] == 0
-        and item["latest_disruption_at"] is None
-        for line_id, item in summary.items()
-        if line_id != "circle"
-    )
+    assert [snapshot["observed_at"] for snapshot in summary["circle"]] == [
+        "2026-06-09T11:00:00Z",
+        "2026-06-09T08:00:00Z",
+    ]
+    assert [snapshot["transition"] for snapshot in summary["circle"]] == [
+        "disruption_started",
+        "disruption_started",
+    ]
+    assert [snapshot["statuses"][0]["reason"] for snapshot in summary["circle"]] == [
+        "New delays",
+        "Earlier delays",
+    ]
+    assert summary["northern"] == []
+    assert all(item == [] for line_id, item in summary.items() if line_id != "circle")
 
 
 async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
@@ -426,16 +427,24 @@ async def test_disruption_summary_counts_special_service_as_disrupted() -> None:
     assert response.status_code == 200
     summary = response.json()["lines"]
     assert set(summary) == SUPPORTED_LINE_IDS
-    assert summary["district"]["disrupted"] is True
-    assert summary["district"]["disruption_count"] == 1
-    assert summary["district"]["latest_disruption_at"] == "2026-06-09T07:00:00Z"
-    assert all(
-        not item["disrupted"]
-        and item["disruption_count"] == 0
-        and item["latest_disruption_at"] is None
-        for line_id, item in summary.items()
-        if line_id != "district"
-    )
+    assert len(summary["district"]) == 1
+    assert summary["district"][0]["observed_at"] == "2026-06-09T07:00:00Z"
+    assert summary["district"][0]["transition"] == "baseline"
+    assert summary["district"][0]["statuses"] == [
+        {
+            "status_severity": 0,
+            "status_severity_description": "Special Service",
+            "reason": "Special timetable",
+            "disruption": None,
+        },
+        {
+            "status_severity": 10,
+            "status_severity_description": "Good Service",
+            "reason": None,
+            "disruption": None,
+        },
+    ]
+    assert all(item == [] for line_id, item in summary.items() if line_id != "district")
 
 
 async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> None:
@@ -479,11 +488,7 @@ async def test_planned_closure_is_in_timeline_but_not_disruption_summary() -> No
 
     assert summary_response.status_code == 200
     summary = summary_response.json()["lines"]
-    assert summary["district"] == {
-        "disrupted": False,
-        "disruption_count": 0,
-        "latest_disruption_at": None,
-    }
+    assert summary["district"] == []
 
 
 async def test_disruption_summary_defaults_to_current_and_rejects_future_operational_date() -> None:
@@ -505,14 +510,7 @@ async def test_disruption_summary_defaults_to_current_and_rejects_future_operati
         "timezone": "Europe/London",
         "starts_at": starts_at.isoformat(),
         "ends_at": ends_at.isoformat(),
-        "lines": {
-            line_id: {
-                "disrupted": False,
-                "disruption_count": 0,
-                "latest_disruption_at": None,
-            }
-            for line_id in sorted(SUPPORTED_LINE_IDS)
-        },
+        "lines": {line_id: [] for line_id in sorted(SUPPORTED_LINE_IDS)},
     }
     assert future_response.status_code == 422
     assert future_response.json() == {"detail": "Operational date cannot be in the future"}
