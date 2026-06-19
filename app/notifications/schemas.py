@@ -21,8 +21,8 @@ class NotificationSeverityThreshold(StrEnum):
 class NotificationSchedulePreset(StrEnum):
     ANYTIME = "anytime"
     WEEKDAY_PEAK = "weekday_peak"
-    WEEKDAY_MORNING_PEAK = "weekday_morning_peak"
-    WEEKDAY_EVENING_PEAK = "weekday_evening_peak"
+    WEEKDAY_ALL_DAY = "weekday_all_day"
+    WEEKENDS = "weekends"
     CUSTOM = "custom"
 
 
@@ -120,3 +120,10 @@ class NotificationPreferencesRead(NotificationPreferencesUpdate):
     device_id: str
     created_at: datetime
     updated_at: datetime
+
+
+class NotificationTestPushRead(BaseModel):
+    device_id: str
+    status: str
+    provider_message_id: str | None = None
+    failure_reason: str | None = None
