@@ -21,8 +21,8 @@ class NotificationSeverityThreshold(StrEnum):
 class NotificationSchedulePreset(StrEnum):
     ANYTIME = "anytime"
     WEEKDAY_PEAK = "weekday_peak"
-    WEEKDAY_MORNING_PEAK = "weekday_morning_peak"
-    WEEKDAY_EVENING_PEAK = "weekday_evening_peak"
+    WEEKDAY_ALL_DAY = "weekday_all_day"
+    WEEKENDS = "weekends"
     CUSTOM = "custom"
 
 

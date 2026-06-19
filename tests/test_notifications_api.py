@@ -196,6 +196,55 @@ async def test_custom_preferences_accept_schedule_windows() -> None:
     ]
 
 
+@pytest.mark.parametrize("schedule_preset", ["weekday_all_day", "weekends"])
+async def test_preferences_accept_all_day_schedule_presets(schedule_preset: str) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={
+                "line_ids": ["victoria"],
+                "schedule_preset": schedule_preset,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["schedule_preset"] == schedule_preset
+    assert response.json()["custom_schedules"] == []
+
+
+@pytest.mark.parametrize(
+    "schedule_preset",
+    ["weekday_morning_peak", "weekday_evening_peak"],
+)
+async def test_preferences_reject_removed_peak_schedule_presets(
+    schedule_preset: str,
+) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={
+                "line_ids": ["victoria"],
+                "schedule_preset": schedule_preset,
+            },
+        )
+
+    assert response.status_code == 422
+
+
 async def test_rejects_unsupported_line_ids() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),

@@ -162,21 +162,39 @@ def test_weekday_peak_schedule_excludes_weekends() -> None:
     )
 
 
-def test_morning_and_evening_peak_presets_are_separate() -> None:
+def test_weekday_all_day_matches_only_weekdays() -> None:
     assert device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_morning_peak"),
-        now=datetime(2026, 6, 16, 7, 30, tzinfo=UTC),
+        device=device(schedule_preset="weekday_all_day"),
+        now=datetime(2026, 6, 16, 2, 0, tzinfo=UTC),
+    )
+    assert device_matches_candidate(
+        candidate=candidate(),
+        device=device(schedule_preset="weekday_all_day"),
+        now=datetime(2026, 6, 16, 22, 0, tzinfo=UTC),
     )
     assert not device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_morning_peak"),
-        now=datetime(2026, 6, 16, 17, 30, tzinfo=UTC),
+        device=device(schedule_preset="weekday_all_day"),
+        now=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+    )
+
+
+def test_weekends_matches_only_saturday_and_sunday() -> None:
+    assert device_matches_candidate(
+        candidate=candidate(),
+        device=device(schedule_preset="weekends"),
+        now=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
     )
     assert device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_evening_peak"),
-        now=datetime(2026, 6, 16, 17, 30, tzinfo=UTC),
+        device=device(schedule_preset="weekends"),
+        now=datetime(2026, 6, 21, 12, 0, tzinfo=UTC),
+    )
+    assert not device_matches_candidate(
+        candidate=candidate(),
+        device=device(schedule_preset="weekends"),
+        now=datetime(2026, 6, 22, 12, 0, tzinfo=UTC),
     )
 
 

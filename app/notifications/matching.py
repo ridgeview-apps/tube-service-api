@@ -85,22 +85,12 @@ def _within_schedule(
     match NotificationSchedulePreset(preferences.schedule_preset):
         case NotificationSchedulePreset.ANYTIME:
             return True
+        case NotificationSchedulePreset.WEEKDAY_ALL_DAY:
+            return local_time.weekday() < 5
+        case NotificationSchedulePreset.WEEKENDS:
+            return local_time.weekday() >= 5
         case NotificationSchedulePreset.WEEKDAY_PEAK:
             windows = _weekday_peak_windows()
-        case NotificationSchedulePreset.WEEKDAY_MORNING_PEAK:
-            windows = [
-                _window(
-                    start_time=time(7, 0),
-                    end_time=time(9, 30),
-                )
-            ]
-        case NotificationSchedulePreset.WEEKDAY_EVENING_PEAK:
-            windows = [
-                _window(
-                    start_time=time(16, 30),
-                    end_time=time(19, 0),
-                )
-            ]
         case NotificationSchedulePreset.CUSTOM:
             windows = [
                 NotificationScheduleWindow.model_validate(schedule)
