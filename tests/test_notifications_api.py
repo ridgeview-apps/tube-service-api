@@ -1,5 +1,6 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -8,6 +9,7 @@ from app.api.security import require_api_key
 from app.config import Settings, get_settings
 from app.database import Base, get_session
 from app.main import app
+from app.notifications.models import NotificationDevice
 from app.notifications.sender import PushSendResult, PushSendStatus
 
 test_engine = create_async_engine(
@@ -117,12 +119,20 @@ async def test_updates_and_reads_notification_preferences() -> None:
         update_response = await client.put(
             "/v1/notification-devices/install-123/preferences",
             json={
-                "enabled": True,
-                "line_ids": ["Victoria", "central", "victoria"],
-                "severity_threshold": "severe_delays",
-                "notify_recoveries": False,
                 "timezone": "Europe/London",
-                "schedule_preset": "weekday_peak",
+                "lines": [
+                    {
+                        "line_id": "Victoria",
+                        "severity_threshold": "severe_delays",
+                        "notify_recoveries": False,
+                        "schedule_preset": "weekday_peak",
+                    },
+                    {
+                        "line_id": "central",
+                        "enabled": False,
+                        "schedule_preset": "anytime",
+                    },
+                ],
             },
         )
         read_response = await client.get(
@@ -132,13 +142,25 @@ async def test_updates_and_reads_notification_preferences() -> None:
     assert update_response.status_code == 200
     assert read_response.status_code == 200
     assert read_response.json()["device_id"] == "install-123"
-    assert read_response.json()["enabled"] is True
-    assert read_response.json()["line_ids"] == ["victoria", "central"]
-    assert read_response.json()["severity_threshold"] == "severe_delays"
-    assert read_response.json()["notify_recoveries"] is False
     assert read_response.json()["timezone"] == "Europe/London"
-    assert read_response.json()["schedule_preset"] == "weekday_peak"
-    assert read_response.json()["custom_schedules"] == []
+    assert read_response.json()["lines"] == [
+        {
+            "enabled": False,
+            "line_id": "central",
+            "severity_threshold": "minor_delays",
+            "notify_recoveries": True,
+            "schedule_preset": "anytime",
+            "custom_schedules": [],
+        },
+        {
+            "enabled": True,
+            "line_id": "victoria",
+            "severity_threshold": "severe_delays",
+            "notify_recoveries": False,
+            "schedule_preset": "weekday_peak",
+            "custom_schedules": [],
+        },
+    ]
 
 
 async def test_custom_preferences_require_schedule_windows() -> None:
@@ -153,9 +175,13 @@ async def test_custom_preferences_require_schedule_windows() -> None:
         response = await client.put(
             "/v1/notification-devices/install-123/preferences",
             json={
-                "line_ids": ["victoria"],
-                "schedule_preset": "custom",
-                "custom_schedules": [],
+                "lines": [
+                    {
+                        "line_id": "victoria",
+                        "schedule_preset": "custom",
+                        "custom_schedules": [],
+                    }
+                ],
             },
         )
 
@@ -174,20 +200,24 @@ async def test_custom_preferences_accept_schedule_windows() -> None:
         response = await client.put(
             "/v1/notification-devices/install-123/preferences",
             json={
-                "line_ids": ["victoria"],
-                "schedule_preset": "custom",
-                "custom_schedules": [
+                "lines": [
                     {
-                        "days": ["mon", "tue", "wed", "thu", "fri"],
-                        "start_time": "07:00",
-                        "end_time": "09:30",
+                        "line_id": "victoria",
+                        "schedule_preset": "custom",
+                        "custom_schedules": [
+                            {
+                                "days": ["mon", "tue", "wed", "thu", "fri"],
+                                "start_time": "07:00",
+                                "end_time": "09:30",
+                            }
+                        ],
                     }
                 ],
             },
         )
 
     assert response.status_code == 200
-    assert response.json()["custom_schedules"] == [
+    assert response.json()["lines"][0]["custom_schedules"] == [
         {
             "days": ["mon", "tue", "wed", "thu", "fri"],
             "start_time": "07:00:00",
@@ -209,14 +239,18 @@ async def test_preferences_accept_all_day_schedule_presets(schedule_preset: str)
         response = await client.put(
             "/v1/notification-devices/install-123/preferences",
             json={
-                "line_ids": ["victoria"],
-                "schedule_preset": schedule_preset,
+                "lines": [
+                    {
+                        "line_id": "victoria",
+                        "schedule_preset": schedule_preset,
+                    }
+                ],
             },
         )
 
     assert response.status_code == 200
-    assert response.json()["schedule_preset"] == schedule_preset
-    assert response.json()["custom_schedules"] == []
+    assert response.json()["lines"][0]["schedule_preset"] == schedule_preset
+    assert response.json()["lines"][0]["custom_schedules"] == []
 
 
 @pytest.mark.parametrize(
@@ -237,8 +271,12 @@ async def test_preferences_reject_removed_peak_schedule_presets(
         response = await client.put(
             "/v1/notification-devices/install-123/preferences",
             json={
-                "line_ids": ["victoria"],
-                "schedule_preset": schedule_preset,
+                "lines": [
+                    {
+                        "line_id": "victoria",
+                        "schedule_preset": schedule_preset,
+                    }
+                ],
             },
         )
 
@@ -256,13 +294,30 @@ async def test_rejects_unsupported_line_ids() -> None:
         )
         response = await client.put(
             "/v1/notification-devices/install-123/preferences",
-            json={"line_ids": ["victoria", "imaginary"]},
+            json={"lines": [{"line_id": "victoria"}, {"line_id": "imaginary"}]},
         )
 
     assert response.status_code == 422
 
 
-async def test_disables_notification_device_and_preferences() -> None:
+async def test_rejects_duplicate_normalized_line_ids() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={"lines": [{"line_id": "Victoria"}, {"line_id": "victoria"}]},
+        )
+
+    assert response.status_code == 422
+
+
+async def test_updating_preferences_replaces_omitted_lines() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -273,7 +328,32 @@ async def test_disables_notification_device_and_preferences() -> None:
         )
         await client.put(
             "/v1/notification-devices/install-123/preferences",
-            json={"line_ids": ["victoria"]},
+            json={"lines": [{"line_id": "victoria"}, {"line_id": "central"}]},
+        )
+        update_response = await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={"lines": [{"line_id": "central"}]},
+        )
+        read_response = await client.get(
+            "/v1/notification-devices/install-123/preferences",
+        )
+
+    assert update_response.status_code == 200
+    assert [line["line_id"] for line in read_response.json()["lines"]] == ["central"]
+
+
+async def test_disables_notification_device_without_changing_line_preferences() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={"lines": [{"line_id": "victoria"}]},
         )
 
         disable_response = await client.post("/v1/notification-devices/install-123/disable")
@@ -283,7 +363,31 @@ async def test_disables_notification_device_and_preferences() -> None:
 
     assert disable_response.status_code == 200
     assert disable_response.json()["enabled"] is False
-    assert preferences_response.json()["enabled"] is False
+    assert preferences_response.json()["lines"][0]["enabled"] is True
+
+
+async def test_updating_preferences_does_not_reenable_disabled_device() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        await client.post("/v1/notification-devices/install-123/disable")
+        await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={"lines": [{"line_id": "victoria", "enabled": True}]},
+        )
+
+    async with db_session_factory() as session:
+        device = await session.scalar(
+            select(NotificationDevice).where(NotificationDevice.device_id == "install-123")
+        )
+
+    assert device is not None
+    assert device.enabled is False
 
 
 async def test_deletes_notification_device() -> None:

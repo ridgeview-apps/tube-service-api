@@ -71,30 +71,38 @@ class NotificationDeviceRead(BaseModel):
     last_seen_at: datetime
 
 
-class NotificationPreferencesUpdate(BaseModel):
+class NotificationLinePreferenceUpdate(BaseModel):
     enabled: bool = True
-    line_ids: list[str] = Field(default_factory=list)
+    line_id: str
     severity_threshold: NotificationSeverityThreshold = NotificationSeverityThreshold.MINOR_DELAYS
     notify_recoveries: bool = True
-    timezone: str = "Europe/London"
     schedule_preset: NotificationSchedulePreset = NotificationSchedulePreset.WEEKDAY_PEAK
     custom_schedules: list[NotificationScheduleWindow] = Field(default_factory=list)
 
-    @field_validator("line_ids", mode="before")
+    @field_validator("line_id", mode="before")
     @classmethod
-    def normalize_line_ids(cls, value: object) -> object:
-        if not isinstance(value, list):
-            return value
-        return [line_id.lower() if isinstance(line_id, str) else line_id for line_id in value]
+    def normalize_line_id(cls, value: object) -> object:
+        return value.lower() if isinstance(value, str) else value
 
-    @field_validator("line_ids")
+    @field_validator("line_id")
     @classmethod
-    def validate_line_ids(cls, value: list[str]) -> list[str]:
-        unique_line_ids = list(dict.fromkeys(value))
-        unsupported_line_ids = sorted(set(unique_line_ids) - SUPPORTED_LINE_IDS)
-        if unsupported_line_ids:
-            raise ValueError(f"Unsupported line IDs: {', '.join(unsupported_line_ids)}")
-        return unique_line_ids
+    def validate_line_id(cls, value: str) -> str:
+        if value not in SUPPORTED_LINE_IDS:
+            raise ValueError(f"Unsupported line ID: {value}")
+        return value
+
+    @model_validator(mode="after")
+    def require_custom_schedules_for_custom_preset(self) -> "NotificationLinePreferenceUpdate":
+        if self.schedule_preset == NotificationSchedulePreset.CUSTOM and not self.custom_schedules:
+            raise ValueError("custom_schedules is required for the custom preset")
+        if self.schedule_preset != NotificationSchedulePreset.CUSTOM:
+            self.custom_schedules = []
+        return self
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    timezone: str = "Europe/London"
+    lines: list[NotificationLinePreferenceUpdate] = Field(default_factory=list)
 
     @field_validator("timezone")
     @classmethod
@@ -105,19 +113,27 @@ class NotificationPreferencesUpdate(BaseModel):
             raise ValueError("Invalid timezone") from error
         return value
 
-    @model_validator(mode="after")
-    def require_custom_schedules_for_custom_preset(self) -> "NotificationPreferencesUpdate":
-        if self.schedule_preset == NotificationSchedulePreset.CUSTOM and not self.custom_schedules:
-            raise ValueError("custom_schedules is required for the custom preset")
-        if self.schedule_preset != NotificationSchedulePreset.CUSTOM:
-            self.custom_schedules = []
-        return self
+    @field_validator("lines")
+    @classmethod
+    def require_unique_line_ids(
+        cls,
+        value: list[NotificationLinePreferenceUpdate],
+    ) -> list[NotificationLinePreferenceUpdate]:
+        line_ids = [line.line_id for line in value]
+        if len(line_ids) != len(set(line_ids)):
+            raise ValueError("Duplicate line IDs are not allowed")
+        return value
+
+
+class NotificationLinePreferenceRead(NotificationLinePreferenceUpdate):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationPreferencesRead(NotificationPreferencesUpdate):
     model_config = ConfigDict(from_attributes=True)
 
     device_id: str
+    lines: list[NotificationLinePreferenceRead]
     created_at: datetime
     updated_at: datetime
 

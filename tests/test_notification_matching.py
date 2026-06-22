@@ -6,7 +6,11 @@ from app.notifications.matching import (
     device_matches_candidate,
     matching_delivery_targets,
 )
-from app.notifications.models import NotificationDevice, NotificationPreferences
+from app.notifications.models import (
+    NotificationDevice,
+    NotificationLinePreference,
+    NotificationPreferences,
+)
 
 
 def candidate(
@@ -31,7 +35,7 @@ def device(
     *,
     device_id: str = "install-123",
     enabled: bool = True,
-    preferences_enabled: bool = True,
+    line_enabled: bool = True,
     line_ids: list[str] | None = None,
     severity_threshold: str = "minor_delays",
     notify_recoveries: bool = True,
@@ -51,15 +55,21 @@ def device(
     )
     notification_device.preferences = NotificationPreferences(
         device_id=device_id,
-        enabled=preferences_enabled,
-        line_ids=line_ids or ["victoria"],
-        severity_threshold=severity_threshold,
-        notify_recoveries=notify_recoveries,
         timezone=timezone,
-        schedule_preset=schedule_preset,
-        custom_schedules=custom_schedules or [],
         created_at=datetime(2026, 6, 16, 6, 0, tzinfo=UTC),
         updated_at=datetime(2026, 6, 16, 6, 0, tzinfo=UTC),
+        lines=[
+            NotificationLinePreference(
+                device_id=device_id,
+                line_id=line_id,
+                enabled=line_enabled,
+                severity_threshold=severity_threshold,
+                notify_recoveries=notify_recoveries,
+                schedule_preset=schedule_preset,
+                custom_schedules=custom_schedules or [],
+            )
+            for line_id in (line_ids or ["victoria"])
+        ],
     )
     return notification_device
 
@@ -71,14 +81,14 @@ def test_enabled_device_with_matching_line_threshold_and_schedule_matches() -> N
     )
 
 
-def test_disabled_device_or_preferences_do_not_match() -> None:
+def test_disabled_device_or_line_preference_does_not_match() -> None:
     assert not device_matches_candidate(
         candidate=candidate(),
         device=device(enabled=False),
     )
     assert not device_matches_candidate(
         candidate=candidate(),
-        device=device(preferences_enabled=False),
+        device=device(line_enabled=False),
     )
 
 
@@ -96,6 +106,23 @@ def test_device_must_subscribe_to_candidate_line() -> None:
     assert not device_matches_candidate(
         candidate=candidate(line_id="central"),
         device=device(line_ids=["victoria"]),
+    )
+
+
+def test_each_line_uses_its_own_notification_settings() -> None:
+    notification_device = device(line_ids=["victoria", "central"])
+    central_preferences = next(
+        line for line in notification_device.preferences.lines if line.line_id == "central"
+    )
+    central_preferences.severity_threshold = "suspended"
+
+    assert device_matches_candidate(
+        candidate=candidate(line_id="victoria", severity=9),
+        device=notification_device,
+    )
+    assert not device_matches_candidate(
+        candidate=candidate(line_id="central", severity=9),
+        device=notification_device,
     )
 
 

@@ -41,16 +41,32 @@ class NotificationPreferences(Base):
         ForeignKey("notification_devices.device_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    line_ids: Mapped[list[str]] = mapped_column(JSON)
-    severity_threshold: Mapped[str] = mapped_column(String(32))
-    notify_recoveries: Mapped[bool] = mapped_column(Boolean, default=True)
     timezone: Mapped[str] = mapped_column(String(64))
-    schedule_preset: Mapped[str] = mapped_column(String(32))
-    custom_schedules: Mapped[list[dict[str, object]]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     device: Mapped[NotificationDevice] = relationship(back_populates="preferences")
+    lines: Mapped[list["NotificationLinePreference"]] = relationship(
+        back_populates="preferences",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="NotificationLinePreference.line_id",
+    )
+
+
+class NotificationLinePreference(Base):
+    __tablename__ = "notification_line_preferences"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("notification_preferences.device_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    line_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    severity_threshold: Mapped[str] = mapped_column(String(32))
+    notify_recoveries: Mapped[bool] = mapped_column(Boolean, default=True)
+    schedule_preset: Mapped[str] = mapped_column(String(32))
+    custom_schedules: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    preferences: Mapped[NotificationPreferences] = relationship(back_populates="lines")
 
 
 class NotificationEvent(Base):
