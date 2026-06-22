@@ -10,6 +10,7 @@ from app.notifications.models import (
     NotificationDelivery,
     NotificationDevice,
     NotificationEvent,
+    NotificationLinePreference,
     NotificationPreferences,
 )
 from app.notifications.schemas import (
@@ -27,6 +28,10 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _load_preferences():
+    return selectinload(NotificationDevice.preferences).selectinload(NotificationPreferences.lines)
+
+
 async def get_device(
     session: AsyncSession,
     device_id: str,
@@ -34,7 +39,7 @@ async def get_device(
     statement = (
         select(NotificationDevice)
         .where(NotificationDevice.device_id == device_id)
-        .options(selectinload(NotificationDevice.preferences))
+        .options(_load_preferences())
     )
     return await session.scalar(statement)
 
@@ -45,7 +50,7 @@ async def get_notification_devices_with_preferences(
     statement = (
         select(NotificationDevice)
         .where(NotificationDevice.preferences.has())
-        .options(selectinload(NotificationDevice.preferences))
+        .options(_load_preferences())
     )
     return list((await session.scalars(statement)).all())
 
@@ -96,7 +101,12 @@ async def get_preferences(
     session: AsyncSession,
     device_id: str,
 ) -> NotificationPreferences | None:
-    return await session.get(NotificationPreferences, device_id)
+    statement = (
+        select(NotificationPreferences)
+        .where(NotificationPreferences.device_id == device_id)
+        .options(selectinload(NotificationPreferences.lines))
+    )
+    return await session.scalar(statement)
 
 
 async def upsert_preferences(
@@ -110,33 +120,37 @@ async def upsert_preferences(
 
     now = utc_now()
     preferences = await get_preferences(session, device_id)
-    custom_schedules = [schedule.model_dump(mode="json") for schedule in update.custom_schedules]
     if preferences is None:
         preferences = NotificationPreferences(
             device_id=device_id,
-            enabled=update.enabled,
-            line_ids=update.line_ids,
-            severity_threshold=update.severity_threshold.value,
-            notify_recoveries=update.notify_recoveries,
             timezone=update.timezone,
-            schedule_preset=update.schedule_preset.value,
-            custom_schedules=custom_schedules,
             created_at=now,
             updated_at=now,
         )
         session.add(preferences)
     else:
-        preferences.enabled = update.enabled
-        preferences.line_ids = update.line_ids
-        preferences.severity_threshold = update.severity_threshold.value
-        preferences.notify_recoveries = update.notify_recoveries
         preferences.timezone = update.timezone
-        preferences.schedule_preset = update.schedule_preset.value
-        preferences.custom_schedules = custom_schedules
         preferences.updated_at = now
 
-    device.enabled = update.enabled
-    device.updated_at = now
+    existing_lines = {line.line_id: line for line in preferences.lines}
+    updated_lines: list[NotificationLinePreference] = []
+    for line_update in update.lines:
+        line = existing_lines.get(line_update.line_id)
+        if line is None:
+            line = NotificationLinePreference(
+                device_id=device_id,
+                line_id=line_update.line_id,
+            )
+        line.enabled = line_update.enabled
+        line.severity_threshold = line_update.severity_threshold.value
+        line.notify_recoveries = line_update.notify_recoveries
+        line.schedule_preset = line_update.schedule_preset.value
+        line.custom_schedules = [
+            schedule.model_dump(mode="json") for schedule in line_update.custom_schedules
+        ]
+        updated_lines.append(line)
+    preferences.lines = updated_lines
+
     await session.commit()
     await session.refresh(preferences)
     return preferences
@@ -150,9 +164,6 @@ async def disable_device(session: AsyncSession, device_id: str) -> NotificationD
     now = utc_now()
     device.enabled = False
     device.updated_at = now
-    if device.preferences is not None:
-        device.preferences.enabled = False
-        device.preferences.updated_at = now
 
     await session.commit()
     await session.refresh(device)

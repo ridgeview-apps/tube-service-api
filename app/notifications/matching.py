@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.line_status.severity import TflRailStatusSeverity
 from app.notifications.events import NotificationCandidate, NotificationEventType
-from app.notifications.models import NotificationDevice, NotificationPreferences
+from app.notifications.models import NotificationDevice, NotificationLinePreference
 from app.notifications.schemas import (
     NotificationSchedulePreset,
     NotificationScheduleWindow,
@@ -44,18 +44,26 @@ def device_matches_candidate(
     now: datetime | None = None,
 ) -> bool:
     preferences = device.preferences
-    if not device.enabled or preferences is None or not preferences.enabled:
+    if not device.enabled or preferences is None:
         return False
-    if candidate.line_id not in preferences.line_ids:
+    line_preferences = next(
+        (line for line in preferences.lines if line.line_id == candidate.line_id),
+        None,
+    )
+    if line_preferences is None or not line_preferences.enabled:
         return False
     if candidate.event_type == NotificationEventType.SERVICE_RESUMED:
-        if not preferences.notify_recoveries:
+        if not line_preferences.notify_recoveries:
             return False
-    elif not _severity_matches_threshold(candidate.severity, preferences.severity_threshold):
+    elif not _severity_matches_threshold(candidate.severity, line_preferences.severity_threshold):
         return False
 
     checked_at = now or candidate.observed_at
-    return _within_schedule(preferences=preferences, checked_at=checked_at)
+    return _within_schedule(
+        line_preferences=line_preferences,
+        timezone=preferences.timezone,
+        checked_at=checked_at,
+    )
 
 
 def _severity_matches_threshold(severity: int, threshold: str) -> bool:
@@ -74,15 +82,16 @@ def _severity_matches_threshold(severity: int, threshold: str) -> bool:
 
 def _within_schedule(
     *,
-    preferences: NotificationPreferences,
+    line_preferences: NotificationLinePreference,
+    timezone: str,
     checked_at: datetime,
 ) -> bool:
     try:
-        local_time = checked_at.astimezone(ZoneInfo(preferences.timezone))
+        local_time = checked_at.astimezone(ZoneInfo(timezone))
     except ZoneInfoNotFoundError:
         return False
 
-    match NotificationSchedulePreset(preferences.schedule_preset):
+    match NotificationSchedulePreset(line_preferences.schedule_preset):
         case NotificationSchedulePreset.ANYTIME:
             return True
         case NotificationSchedulePreset.WEEKDAY_ALL_DAY:
@@ -94,7 +103,7 @@ def _within_schedule(
         case NotificationSchedulePreset.CUSTOM:
             windows = [
                 NotificationScheduleWindow.model_validate(schedule)
-                for schedule in preferences.custom_schedules
+                for schedule in line_preferences.custom_schedules
             ]
 
     return any(_window_contains(window=window, checked_at=local_time) for window in windows)

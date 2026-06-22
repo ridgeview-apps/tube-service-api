@@ -12,6 +12,7 @@ from app.notifications.models import (
     NotificationDelivery,
     NotificationDevice,
     NotificationEvent,
+    NotificationLinePreference,
     NotificationPreferences,
 )
 from app.notifications.repository import PENDING_DELIVERY_STATUS
@@ -141,15 +142,21 @@ async def add_notification_device(
                 last_seen_at=now,
                 preferences=NotificationPreferences(
                     device_id=device_id,
-                    enabled=True,
-                    line_ids=line_ids or ["victoria"],
-                    severity_threshold="minor_delays",
-                    notify_recoveries=True,
                     timezone="Europe/London",
-                    schedule_preset=schedule_preset,
-                    custom_schedules=[],
                     created_at=now,
                     updated_at=now,
+                    lines=[
+                        NotificationLinePreference(
+                            device_id=device_id,
+                            line_id=line_id,
+                            enabled=True,
+                            severity_threshold="minor_delays",
+                            notify_recoveries=True,
+                            schedule_preset=schedule_preset,
+                            custom_schedules=[],
+                        )
+                        for line_id in (line_ids or ["victoria"])
+                    ],
                 ),
             )
         )
