@@ -167,12 +167,12 @@ def test_weekday_peak_schedule_matches_morning_and_evening_windows() -> None:
     assert device_matches_candidate(
         candidate=candidate(),
         device=notification_device,
-        now=datetime(2026, 6, 16, 7, 0, tzinfo=UTC),
+        now=datetime(2026, 6, 16, 6, 30, tzinfo=UTC),
     )
     assert device_matches_candidate(
         candidate=candidate(),
         device=notification_device,
-        now=datetime(2026, 6, 16, 17, 0, tzinfo=UTC),
+        now=datetime(2026, 6, 16, 16, 0, tzinfo=UTC),
     )
     assert not device_matches_candidate(
         candidate=candidate(),

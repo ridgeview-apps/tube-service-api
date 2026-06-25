@@ -112,11 +112,11 @@ def _within_schedule(
 def _weekday_peak_windows() -> list[NotificationScheduleWindow]:
     return [
         _window(
-            start_time=time(7, 0),
+            start_time=time(6, 30),
             end_time=time(9, 30),
         ),
         _window(
-            start_time=time(16, 30),
+            start_time=time(16, 0),
             end_time=time(19, 0),
         ),
     ]
