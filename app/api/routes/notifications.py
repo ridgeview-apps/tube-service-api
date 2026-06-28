@@ -11,6 +11,7 @@ from app.notifications.models import NotificationDelivery, NotificationEvent
 from app.notifications.repository import (
     delete_device,
     disable_device,
+    enable_device,
     get_device,
     get_preferences,
     upsert_device,
@@ -88,6 +89,20 @@ async def disable_notification_device(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> NotificationDeviceRead:
     device = await disable_device(session, device_id)
+    if device is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification device not found",
+        )
+    return device
+
+
+@router.post("/{device_id}/enable", response_model=NotificationDeviceRead)
+async def enable_notification_device(
+    device_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> NotificationDeviceRead:
+    device = await enable_device(session, device_id)
     if device is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

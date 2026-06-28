@@ -170,6 +170,20 @@ async def disable_device(session: AsyncSession, device_id: str) -> NotificationD
     return device
 
 
+async def enable_device(session: AsyncSession, device_id: str) -> NotificationDevice | None:
+    device = await get_device(session, device_id)
+    if device is None:
+        return None
+
+    now = utc_now()
+    device.enabled = True
+    device.updated_at = now
+
+    await session.commit()
+    await session.refresh(device)
+    return device
+
+
 async def delete_device(session: AsyncSession, device_id: str) -> bool:
     device = await get_device(session, device_id)
     if device is None:

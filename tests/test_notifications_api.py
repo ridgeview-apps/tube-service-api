@@ -366,6 +366,31 @@ async def test_disables_notification_device_without_changing_line_preferences() 
     assert preferences_response.json()["lines"][0]["enabled"] is True
 
 
+async def test_enables_notification_device_without_changing_line_preferences() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={"lines": [{"line_id": "victoria", "enabled": False}]},
+        )
+        await client.post("/v1/notification-devices/install-123/disable")
+
+        enable_response = await client.post("/v1/notification-devices/install-123/enable")
+        preferences_response = await client.get(
+            "/v1/notification-devices/install-123/preferences",
+        )
+
+    assert enable_response.status_code == 200
+    assert enable_response.json()["enabled"] is True
+    assert preferences_response.json()["lines"][0]["enabled"] is False
+
+
 async def test_updating_preferences_does_not_reenable_disabled_device() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
