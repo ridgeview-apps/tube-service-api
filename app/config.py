@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     apns_test_push_enabled: bool = False
     history_cache_today_ttl_seconds: int = Field(default=120, ge=0)
     history_cache_past_ttl_seconds: int = Field(default=3600, ge=0)
+    http_debug_logging: bool = False
+    http_debug_body_limit: int = Field(default=4096, ge=0)
 
     @property
     def apns_is_configured(self) -> bool:
