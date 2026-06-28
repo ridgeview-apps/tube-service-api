@@ -1,3 +1,4 @@
+import json
 import logging
 from time import perf_counter
 
@@ -40,20 +41,37 @@ class HttpDebugMiddleware:
         finally:
             duration_ms = (perf_counter() - started_at) * 1000
             header_map = {key.decode().lower(): value.decode() for key, value in headers}
-            body_text = bytes(body).decode(errors="replace")
             content_length = header_map.get("content-length")
             try:
                 response_length = int(content_length) if content_length is not None else len(body)
             except ValueError:
                 response_length = len(body)
-            truncated_suffix = "..." if response_length > len(body) else ""
+            is_truncated = response_length > len(body)
+            body_text = _format_body(
+                bytes(body),
+                content_type=header_map.get("content-type", ""),
+                is_truncated=is_truncated,
+            )
 
             logger.info(
-                "%s %s -> %s %.1fms %s body=%r",
+                "%s %s -> %s %.1fms %s body=%s",
                 scope["method"],
                 scope["path"],
                 status_code,
                 duration_ms,
                 header_map.get("content-type", ""),
-                f"{body_text}{truncated_suffix}",
+                body_text,
             )
+
+
+def _format_body(body: bytes, *, content_type: str, is_truncated: bool) -> str:
+    body_text = body.decode(errors="replace")
+    if is_truncated:
+        return f"{body_text!r}..."
+    if "json" not in content_type.lower():
+        return repr(body_text)
+    try:
+        parsed_body = json.loads(body_text)
+    except json.JSONDecodeError:
+        return repr(body_text)
+    return "\n" + json.dumps(parsed_body, indent=2)
