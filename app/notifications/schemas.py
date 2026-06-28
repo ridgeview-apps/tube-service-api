@@ -100,9 +100,8 @@ class NotificationLinePreferenceUpdate(BaseModel):
         return self
 
 
-class NotificationPreferencesUpdate(BaseModel):
+class NotificationPreferencesBase(BaseModel):
     timezone: str = "Europe/London"
-    lines: list[NotificationLinePreferenceUpdate] = Field(default_factory=list)
 
     @field_validator("timezone")
     @classmethod
@@ -112,6 +111,10 @@ class NotificationPreferencesUpdate(BaseModel):
         except ZoneInfoNotFoundError as error:
             raise ValueError("Invalid timezone") from error
         return value
+
+
+class NotificationPreferencesUpdate(NotificationPreferencesBase):
+    lines: list[NotificationLinePreferenceUpdate] = Field(default_factory=list)
 
     @field_validator("lines")
     @classmethod
@@ -129,7 +132,7 @@ class NotificationLinePreferenceRead(NotificationLinePreferenceUpdate):
     model_config = ConfigDict(from_attributes=True)
 
 
-class NotificationPreferencesRead(NotificationPreferencesUpdate):
+class NotificationPreferencesRead(NotificationPreferencesBase):
     model_config = ConfigDict(from_attributes=True)
 
     device_id: str
