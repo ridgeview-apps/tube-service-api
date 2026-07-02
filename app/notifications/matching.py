@@ -10,6 +10,7 @@ from app.notifications.schemas import (
     NotificationScheduleWindow,
     NotificationSeverityThreshold,
     PushPlatform,
+    Weekday,
 )
 
 
@@ -130,7 +131,13 @@ def _window(
     end_time: time,
 ) -> NotificationScheduleWindow:
     return NotificationScheduleWindow(
-        days=["mon", "tue", "wed", "thu", "fri"],
+        days=[
+            Weekday.MON,
+            Weekday.TUE,
+            Weekday.WED,
+            Weekday.THU,
+            Weekday.FRI,
+        ],
         start_time=start_time,
         end_time=end_time,
     )

@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.security import require_api_key
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.notifications.models import NotificationDelivery, NotificationEvent
+from app.notifications.models import (
+    NotificationDelivery,
+    NotificationDevice,
+    NotificationEvent,
+    NotificationPreferences,
+)
 from app.notifications.repository import (
     delete_device,
     disable_device,
@@ -50,7 +55,7 @@ async def register_notification_device(
     device_id: str,
     registration: NotificationDeviceRegistration,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> NotificationDeviceRead:
+) -> NotificationDevice:
     return await upsert_device(session, device_id, registration)
 
 
@@ -58,7 +63,7 @@ async def register_notification_device(
 async def read_notification_preferences(
     device_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> NotificationPreferencesRead:
+) -> NotificationPreferences:
     preferences = await get_preferences(session, device_id)
     if preferences is None:
         raise HTTPException(
@@ -73,7 +78,7 @@ async def update_notification_preferences(
     device_id: str,
     update: NotificationPreferencesUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> NotificationPreferencesRead:
+) -> NotificationPreferences:
     preferences = await upsert_preferences(session, device_id, update)
     if preferences is None:
         raise HTTPException(
@@ -87,7 +92,7 @@ async def update_notification_preferences(
 async def disable_notification_device(
     device_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> NotificationDeviceRead:
+) -> NotificationDevice:
     device = await disable_device(session, device_id)
     if device is None:
         raise HTTPException(
@@ -101,7 +106,7 @@ async def disable_notification_device(
 async def enable_notification_device(
     device_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> NotificationDeviceRead:
+) -> NotificationDevice:
     device = await enable_device(session, device_id)
     if device is None:
         raise HTTPException(
