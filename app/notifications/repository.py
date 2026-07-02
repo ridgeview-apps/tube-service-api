@@ -79,6 +79,7 @@ async def upsert_device(
             push_token=registration.push_token,
             enabled=True,
             app_version=registration.app_version,
+            app_variant=registration.app_variant,
             created_at=now,
             updated_at=now,
             last_seen_at=now,
@@ -89,6 +90,7 @@ async def upsert_device(
         device.push_token = registration.push_token
         device.enabled = True
         device.app_version = registration.app_version
+        device.app_variant = registration.app_variant
         device.updated_at = now
         device.last_seen_at = now
 
@@ -170,6 +172,20 @@ async def disable_device(session: AsyncSession, device_id: str) -> NotificationD
     return device
 
 
+async def enable_device(session: AsyncSession, device_id: str) -> NotificationDevice | None:
+    device = await get_device(session, device_id)
+    if device is None:
+        return None
+
+    now = utc_now()
+    device.enabled = True
+    device.updated_at = now
+
+    await session.commit()
+    await session.refresh(device)
+    return device
+
+
 async def delete_device(session: AsyncSession, device_id: str) -> bool:
     device = await get_device(session, device_id)
     if device is None:
@@ -236,6 +252,7 @@ async def create_pending_deliveries(
             device_id=target.device_id,
             platform=target.platform.value,
             push_token=target.push_token,
+            app_variant=target.app_variant,
             status=PENDING_DELIVERY_STATUS,
             provider_message_id=None,
             failure_reason=None,

@@ -38,21 +38,29 @@ def delivery(*, platform: PushPlatform = PushPlatform.IOS) -> NotificationDelive
         device_id="install-123",
         platform=platform.value,
         push_token="push-token",
+        app_variant="production",
         status="pending",
         created_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
         updated_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
     )
 
 
+def delivery_with_variant(app_variant: str) -> NotificationDelivery:
+    notification_delivery = delivery()
+    notification_delivery.app_variant = app_variant
+    return notification_delivery
+
+
 def event(
     *,
+    line_id: str = "victoria",
     event_type: NotificationEventType = NotificationEventType.DISRUPTION_STARTED,
     reason: str | None = "Signal failure",
 ) -> NotificationEvent:
     return NotificationEvent(
         id=7,
         dedupe_key="event-key",
-        line_id="victoria",
+        line_id=line_id,
         event_type=event_type.value,
         observed_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
         severity=6,
@@ -66,7 +74,10 @@ def config() -> APNsConfig:
     return APNsConfig(
         team_id="TEAMID1234",
         key_id="KEYID1234",
-        bundle_id="uk.example.tube-service",
+        bundle_ids={
+            "production": "uk.example.tube-service",
+            "beta": "uk.example.tube-service.beta",
+        },
         private_key="unused-in-tests",
         use_sandbox=True,
     )
@@ -100,9 +111,57 @@ def test_build_apns_payload_for_recovery_event() -> None:
     )
 
     assert payload["aps"]["alert"] == {
-        "title": "Victoria line recovered",
-        "body": "Severe Delays",
+        "title": "Victoria line",
+        "body": "A good service has resumed.",
     }
+
+
+@pytest.mark.parametrize(
+    ("line_id", "title"),
+    [
+        ("hammersmith-city", "Hammersmith & City line disruption"),
+        ("waterloo-city", "Waterloo & City line disruption"),
+        ("dlr", "DLR disruption"),
+        ("tram", "Tram disruption"),
+    ],
+)
+def test_build_apns_payload_formats_line_name_exceptions(line_id: str, title: str) -> None:
+    payload = build_apns_payload(delivery=delivery(), event=event(line_id=line_id))
+
+    assert payload["aps"]["alert"]["title"] == title
+
+
+@pytest.mark.parametrize(
+    ("line_id", "reason", "body"),
+    [
+        (
+            "jubilee",
+            "Jubilee Line: Severe Delays while we respond to a fire alert",
+            "Severe Delays while we respond to a fire alert",
+        ),
+        (
+            "victoria",
+            "Signal failure",
+            "Severe Delays: Signal failure",
+        ),
+        (
+            "hammersmith-city",
+            "Hammersmith & City Line: Severe Delays: Signal failure",
+            "Severe Delays: Signal failure",
+        ),
+    ],
+)
+def test_build_apns_payload_cleans_duplicated_tfl_reason_prefixes(
+    line_id: str,
+    reason: str,
+    body: str,
+) -> None:
+    payload = build_apns_payload(
+        delivery=delivery(),
+        event=event(line_id=line_id, reason=reason),
+    )
+
+    assert payload["aps"]["alert"]["body"] == body
 
 
 def test_apns_response_handling_for_success() -> None:
@@ -150,6 +209,42 @@ async def test_apns_sender_sends_request_without_hitting_apns() -> None:
     assert request.payload["aps"]["alert"]["title"] == "Victoria line disruption"
 
 
+async def test_apns_sender_uses_bundle_id_for_delivery_app_variant() -> None:
+    transport = CapturingAPNsTransport(APNsResponse(status_code=200, apns_id="apns-id"))
+    sender = APNsPushSender(
+        config=config(),
+        transport=transport,
+        token_provider=lambda: "provider-token",
+    )
+
+    result = await sender.send(
+        delivery=delivery_with_variant("beta"),
+        event=event(),
+    )
+
+    assert result.status == PushSendStatus.SENT
+    [request] = transport.requests
+    assert request.headers["apns-topic"] == "uk.example.tube-service.beta"
+
+
+async def test_apns_sender_fails_when_delivery_app_variant_is_not_configured() -> None:
+    transport = CapturingAPNsTransport(APNsResponse(status_code=200, apns_id="apns-id"))
+    sender = APNsPushSender(
+        config=config(),
+        transport=transport,
+        token_provider=lambda: "provider-token",
+    )
+
+    result = await sender.send(
+        delivery=delivery_with_variant("unknown"),
+        event=event(),
+    )
+
+    assert result.status == PushSendStatus.FAILED
+    assert result.failure_reason == "APNs bundle ID is not configured for app variant: unknown"
+    assert transport.requests == []
+
+
 async def test_apns_sender_skips_non_ios_delivery() -> None:
     transport = CapturingAPNsTransport(APNsResponse(status_code=200, apns_id="apns-id"))
     sender = APNsPushSender(
@@ -177,6 +272,22 @@ def test_configured_sender_uses_apns_when_configured() -> None:
             apns_team_id="TEAMID1234",
             apns_key_id="KEYID1234",
             apns_bundle_id="uk.example.tube-service",
+            apns_private_key="private-key",
+        )
+    )
+
+    assert isinstance(sender, APNsPushSender)
+
+
+def test_configured_sender_uses_apns_bundle_ids_when_configured() -> None:
+    sender = build_configured_push_sender(
+        Settings(
+            apns_team_id="TEAMID1234",
+            apns_key_id="KEYID1234",
+            apns_bundle_ids={
+                "production": "uk.example.tube-service",
+                "beta": "uk.example.tube-service.beta",
+            },
             apns_private_key="private-key",
         )
     )

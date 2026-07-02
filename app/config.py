@@ -21,11 +21,14 @@ class Settings(BaseSettings):
     apns_team_id: str | None = None
     apns_key_id: str | None = None
     apns_bundle_id: str | None = None
+    apns_bundle_ids: dict[str, str] = Field(default_factory=dict)
     apns_private_key: SecretStr | None = None
     apns_use_sandbox: bool = True
     apns_test_push_enabled: bool = False
     history_cache_today_ttl_seconds: int = Field(default=120, ge=0)
     history_cache_past_ttl_seconds: int = Field(default=3600, ge=0)
+    http_debug_logging: bool = False
+    http_debug_body_limit: int = Field(default=4096, ge=0)
 
     @property
     def apns_is_configured(self) -> bool:
@@ -34,12 +37,12 @@ class Settings(BaseSettings):
             if self.apns_private_key is not None
             else ""
         )
-        return all(
+        has_bundle_id = bool(self.apns_bundle_ids) or bool((self.apns_bundle_id or "").strip())
+        return has_bundle_id and all(
             value.strip()
             for value in (
                 self.apns_team_id or "",
                 self.apns_key_id or "",
-                self.apns_bundle_id or "",
                 private_key,
             )
         )

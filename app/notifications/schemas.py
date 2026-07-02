@@ -57,6 +57,7 @@ class NotificationDeviceRegistration(BaseModel):
     platform: PushPlatform
     push_token: str = Field(min_length=1, max_length=512)
     app_version: str | None = Field(default=None, max_length=64)
+    app_variant: str = Field(default="production", min_length=1, max_length=64)
 
 
 class NotificationDeviceRead(BaseModel):
@@ -66,6 +67,7 @@ class NotificationDeviceRead(BaseModel):
     platform: PushPlatform
     enabled: bool
     app_version: str | None
+    app_variant: str
     created_at: datetime
     updated_at: datetime
     last_seen_at: datetime
@@ -100,9 +102,8 @@ class NotificationLinePreferenceUpdate(BaseModel):
         return self
 
 
-class NotificationPreferencesUpdate(BaseModel):
+class NotificationPreferencesBase(BaseModel):
     timezone: str = "Europe/London"
-    lines: list[NotificationLinePreferenceUpdate] = Field(default_factory=list)
 
     @field_validator("timezone")
     @classmethod
@@ -112,6 +113,10 @@ class NotificationPreferencesUpdate(BaseModel):
         except ZoneInfoNotFoundError as error:
             raise ValueError("Invalid timezone") from error
         return value
+
+
+class NotificationPreferencesUpdate(NotificationPreferencesBase):
+    lines: list[NotificationLinePreferenceUpdate] = Field(default_factory=list)
 
     @field_validator("lines")
     @classmethod
@@ -129,7 +134,7 @@ class NotificationLinePreferenceRead(NotificationLinePreferenceUpdate):
     model_config = ConfigDict(from_attributes=True)
 
 
-class NotificationPreferencesRead(NotificationPreferencesUpdate):
+class NotificationPreferencesRead(NotificationPreferencesBase):
     model_config = ConfigDict(from_attributes=True)
 
     device_id: str

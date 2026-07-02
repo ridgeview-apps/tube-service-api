@@ -10,6 +10,7 @@ from app.notifications.schemas import (
     NotificationScheduleWindow,
     NotificationSeverityThreshold,
     PushPlatform,
+    Weekday,
 )
 
 
@@ -18,6 +19,7 @@ class NotificationDeliveryTarget:
     device_id: str
     platform: PushPlatform
     push_token: str
+    app_variant: str
 
 
 def matching_delivery_targets(
@@ -31,6 +33,7 @@ def matching_delivery_targets(
             device_id=device.device_id,
             platform=PushPlatform(device.platform),
             push_token=device.push_token,
+            app_variant=device.app_variant,
         )
         for device in devices
         if device_matches_candidate(candidate=candidate, device=device, now=now)
@@ -112,11 +115,11 @@ def _within_schedule(
 def _weekday_peak_windows() -> list[NotificationScheduleWindow]:
     return [
         _window(
-            start_time=time(7, 0),
+            start_time=time(6, 30),
             end_time=time(9, 30),
         ),
         _window(
-            start_time=time(16, 30),
+            start_time=time(16, 0),
             end_time=time(19, 0),
         ),
     ]
@@ -128,7 +131,13 @@ def _window(
     end_time: time,
 ) -> NotificationScheduleWindow:
     return NotificationScheduleWindow(
-        days=["mon", "tue", "wed", "thu", "fri"],
+        days=[
+            Weekday.MON,
+            Weekday.TUE,
+            Weekday.WED,
+            Weekday.THU,
+            Weekday.FRI,
+        ],
         start_time=start_time,
         end_time=end_time,
     )

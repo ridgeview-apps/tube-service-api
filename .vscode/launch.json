@@ -19,6 +19,13 @@
       "request": "launch",
       "module": "app.workers.line_status_snapshot_worker",
       "consoleTitle": "Line Status Snapshot Worker"
+    },
+    {
+      "name": "Push delivery (manual restart)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.workers.notification_delivery_worker",
+      "consoleTitle": "Push Delivery Worker"
     }
   ]
 }

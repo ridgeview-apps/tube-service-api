@@ -104,11 +104,22 @@ delivery worker uses APNs for iOS deliveries:
 ```env
 APNS_TEAM_ID=apple-developer-team-id
 APNS_KEY_ID=apple-auth-key-id
-APNS_BUNDLE_ID=ios-app-bundle-id
+APNS_BUNDLE_IDS={"production":"ios-production-bundle-id","beta":"ios-beta-bundle-id"}
 APNS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 APNS_USE_SANDBOX=true
 APNS_TEST_PUSH_ENABLED=false
 ```
+
+Notification device registration accepts an `app_variant` field that defaults
+to `production`. The API maps that variant to the APNs topic using
+`APNS_BUNDLE_IDS`. For local Xcode debug builds, use a local `.env` such as:
+
+```env
+APNS_USE_SANDBOX=true
+APNS_BUNDLE_IDS={"development":"ios-debug-bundle-id"}
+```
+
+and register the device with `"app_variant": "development"`.
 
 `APNS_PRIVATE_KEY` accepts escaped newlines. Do not commit APNs keys, push
 tokens, or provider secrets.
