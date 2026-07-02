@@ -180,9 +180,11 @@ def build_apns_payload(
         body = "A good service has resumed."
     else:
         title = f"{title_subject} disruption"
-        body = event.status_description
-        if event.reason:
-            body = f"{body}: {event.reason}"
+        body = _disruption_body(
+            line_subject=title_subject,
+            status_description=event.status_description,
+            reason=event.reason,
+        )
 
     return {
         "aps": {
@@ -213,6 +215,29 @@ def build_test_apns_payload(*, device_id: str) -> dict[str, object]:
         "test": True,
         "device_id": device_id,
     }
+
+
+def _disruption_body(
+    *,
+    line_subject: str,
+    status_description: str,
+    reason: str | None,
+) -> str:
+    if not reason:
+        return status_description
+
+    cleaned_reason = _strip_prefix(reason.strip(), f"{line_subject}:").strip()
+    if not cleaned_reason:
+        return status_description
+    if cleaned_reason.casefold().startswith(status_description.casefold()):
+        return cleaned_reason
+    return f"{status_description}: {cleaned_reason}"
+
+
+def _strip_prefix(value: str, prefix: str) -> str:
+    if value.casefold().startswith(prefix.casefold()):
+        return value[len(prefix) :].lstrip()
+    return value
 
 
 def apns_response_to_send_result(response: APNsResponse) -> PushSendResult:

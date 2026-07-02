@@ -131,6 +131,39 @@ def test_build_apns_payload_formats_line_name_exceptions(line_id: str, title: st
     assert payload["aps"]["alert"]["title"] == title
 
 
+@pytest.mark.parametrize(
+    ("line_id", "reason", "body"),
+    [
+        (
+            "jubilee",
+            "Jubilee Line: Severe Delays while we respond to a fire alert",
+            "Severe Delays while we respond to a fire alert",
+        ),
+        (
+            "victoria",
+            "Signal failure",
+            "Severe Delays: Signal failure",
+        ),
+        (
+            "hammersmith-city",
+            "Hammersmith & City Line: Severe Delays: Signal failure",
+            "Severe Delays: Signal failure",
+        ),
+    ],
+)
+def test_build_apns_payload_cleans_duplicated_tfl_reason_prefixes(
+    line_id: str,
+    reason: str,
+    body: str,
+) -> None:
+    payload = build_apns_payload(
+        delivery=delivery(),
+        event=event(line_id=line_id, reason=reason),
+    )
+
+    assert payload["aps"]["alert"]["body"] == body
+
+
 def test_apns_response_handling_for_success() -> None:
     result = apns_response_to_send_result(APNsResponse(status_code=200, apns_id="apns-id"))
 
