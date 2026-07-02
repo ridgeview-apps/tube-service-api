@@ -38,10 +38,17 @@ def delivery(*, platform: PushPlatform = PushPlatform.IOS) -> NotificationDelive
         device_id="install-123",
         platform=platform.value,
         push_token="push-token",
+        app_variant="production",
         status="pending",
         created_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
         updated_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
     )
+
+
+def delivery_with_variant(app_variant: str) -> NotificationDelivery:
+    notification_delivery = delivery()
+    notification_delivery.app_variant = app_variant
+    return notification_delivery
 
 
 def event(
@@ -67,7 +74,10 @@ def config() -> APNsConfig:
     return APNsConfig(
         team_id="TEAMID1234",
         key_id="KEYID1234",
-        bundle_id="uk.example.tube-service",
+        bundle_ids={
+            "production": "uk.example.tube-service",
+            "beta": "uk.example.tube-service.beta",
+        },
         private_key="unused-in-tests",
         use_sandbox=True,
     )
@@ -166,6 +176,42 @@ async def test_apns_sender_sends_request_without_hitting_apns() -> None:
     assert request.payload["aps"]["alert"]["title"] == "Victoria line disruption"
 
 
+async def test_apns_sender_uses_bundle_id_for_delivery_app_variant() -> None:
+    transport = CapturingAPNsTransport(APNsResponse(status_code=200, apns_id="apns-id"))
+    sender = APNsPushSender(
+        config=config(),
+        transport=transport,
+        token_provider=lambda: "provider-token",
+    )
+
+    result = await sender.send(
+        delivery=delivery_with_variant("beta"),
+        event=event(),
+    )
+
+    assert result.status == PushSendStatus.SENT
+    [request] = transport.requests
+    assert request.headers["apns-topic"] == "uk.example.tube-service.beta"
+
+
+async def test_apns_sender_fails_when_delivery_app_variant_is_not_configured() -> None:
+    transport = CapturingAPNsTransport(APNsResponse(status_code=200, apns_id="apns-id"))
+    sender = APNsPushSender(
+        config=config(),
+        transport=transport,
+        token_provider=lambda: "provider-token",
+    )
+
+    result = await sender.send(
+        delivery=delivery_with_variant("unknown"),
+        event=event(),
+    )
+
+    assert result.status == PushSendStatus.FAILED
+    assert result.failure_reason == "APNs bundle ID is not configured for app variant: unknown"
+    assert transport.requests == []
+
+
 async def test_apns_sender_skips_non_ios_delivery() -> None:
     transport = CapturingAPNsTransport(APNsResponse(status_code=200, apns_id="apns-id"))
     sender = APNsPushSender(
@@ -193,6 +239,22 @@ def test_configured_sender_uses_apns_when_configured() -> None:
             apns_team_id="TEAMID1234",
             apns_key_id="KEYID1234",
             apns_bundle_id="uk.example.tube-service",
+            apns_private_key="private-key",
+        )
+    )
+
+    assert isinstance(sender, APNsPushSender)
+
+
+def test_configured_sender_uses_apns_bundle_ids_when_configured() -> None:
+    sender = build_configured_push_sender(
+        Settings(
+            apns_team_id="TEAMID1234",
+            apns_key_id="KEYID1234",
+            apns_bundle_ids={
+                "production": "uk.example.tube-service",
+                "beta": "uk.example.tube-service.beta",
+            },
             apns_private_key="private-key",
         )
     )

@@ -72,6 +72,7 @@ def target(device_id: str) -> NotificationDeliveryTarget:
         device_id=device_id,
         platform=PushPlatform.IOS,
         push_token=f"{device_id}-token",
+        app_variant="production",
     )
 
 

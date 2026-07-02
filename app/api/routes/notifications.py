@@ -163,6 +163,7 @@ async def send_test_push_notification(
             device_id=device.device_id,
             platform=device.platform,
             push_token=device.push_token,
+            app_variant=device.app_variant,
             status="test",
             created_at=observed_at,
             updated_at=observed_at,

@@ -49,6 +49,7 @@ def device(
         push_token=f"{device_id}-token",
         enabled=enabled,
         app_version=None,
+        app_variant="production",
         created_at=datetime(2026, 6, 16, 6, 0, tzinfo=UTC),
         updated_at=datetime(2026, 6, 16, 6, 0, tzinfo=UTC),
         last_seen_at=datetime(2026, 6, 16, 6, 0, tzinfo=UTC),
@@ -264,5 +265,6 @@ def test_matching_delivery_targets_returns_push_safe_target_data() -> None:
             device_id="install-1",
             platform="ios",
             push_token="install-1-token",
+            app_variant="production",
         )
     ]

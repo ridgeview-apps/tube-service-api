@@ -18,6 +18,7 @@ class NotificationDeliveryTarget:
     device_id: str
     platform: PushPlatform
     push_token: str
+    app_variant: str
 
 
 def matching_delivery_targets(
@@ -31,6 +32,7 @@ def matching_delivery_targets(
             device_id=device.device_id,
             platform=PushPlatform(device.platform),
             push_token=device.push_token,
+            app_variant=device.app_variant,
         )
         for device in devices
         if device_matches_candidate(candidate=candidate, device=device, now=now)

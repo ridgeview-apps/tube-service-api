@@ -23,7 +23,7 @@ APNS_INVALID_TOKEN_REASONS = {
 class APNsConfig:
     team_id: str
     key_id: str
-    bundle_id: str
+    bundle_ids: dict[str, str]
     private_key: str
     use_sandbox: bool = True
 
@@ -31,13 +31,19 @@ class APNsConfig:
     def from_settings(cls, settings: Settings) -> "APNsConfig | None":
         if not settings.apns_is_configured or settings.apns_private_key is None:
             return None
+        bundle_ids = settings.apns_bundle_ids
+        if not bundle_ids and settings.apns_bundle_id:
+            bundle_ids = {"production": settings.apns_bundle_id}
         return cls(
             team_id=settings.apns_team_id or "",
             key_id=settings.apns_key_id or "",
-            bundle_id=settings.apns_bundle_id or "",
+            bundle_ids=bundle_ids,
             private_key=settings.apns_private_key.get_secret_value().replace("\\n", "\n"),
             use_sandbox=settings.apns_use_sandbox,
         )
+
+    def bundle_id_for_variant(self, app_variant: str) -> str | None:
+        return self.bundle_ids.get(app_variant)
 
 
 @dataclass(frozen=True)
@@ -109,19 +115,29 @@ class APNsPushSender(PushSender):
                 failure_reason="Unsupported push platform",
             )
 
+        bundle_id = self._config.bundle_id_for_variant(delivery.app_variant)
+        if bundle_id is None:
+            return PushSendResult(
+                status=PushSendStatus.FAILED,
+                failure_reason=(
+                    "APNs bundle ID is not configured for app variant: "
+                    f"{delivery.app_variant}"
+                ),
+            )
+
         response = await self._transport.send(
             APNsRequest(
                 device_token=delivery.push_token,
-                headers=self._headers(),
+                headers=self._headers(bundle_id=bundle_id),
                 payload=build_apns_payload(delivery=delivery, event=event),
             )
         )
         return apns_response_to_send_result(response)
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, bundle_id: str) -> dict[str, str]:
         return {
             "authorization": f"bearer {self._token_provider()}",
-            "apns-topic": self._config.bundle_id,
+            "apns-topic": bundle_id,
             "apns-push-type": "alert",
             "apns-priority": "10",
         }

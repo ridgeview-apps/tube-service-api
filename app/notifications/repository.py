@@ -79,6 +79,7 @@ async def upsert_device(
             push_token=registration.push_token,
             enabled=True,
             app_version=registration.app_version,
+            app_variant=registration.app_variant,
             created_at=now,
             updated_at=now,
             last_seen_at=now,
@@ -89,6 +90,7 @@ async def upsert_device(
         device.push_token = registration.push_token
         device.enabled = True
         device.app_version = registration.app_version
+        device.app_variant = registration.app_variant
         device.updated_at = now
         device.last_seen_at = now
 
@@ -250,6 +252,7 @@ async def create_pending_deliveries(
             device_id=target.device_id,
             platform=target.platform.value,
             push_token=target.push_token,
+            app_variant=target.app_variant,
             status=PENDING_DELIVERY_STATUS,
             provider_message_id=None,
             failure_reason=None,
