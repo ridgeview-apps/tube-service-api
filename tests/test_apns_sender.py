@@ -46,13 +46,14 @@ def delivery(*, platform: PushPlatform = PushPlatform.IOS) -> NotificationDelive
 
 def event(
     *,
+    line_id: str = "victoria",
     event_type: NotificationEventType = NotificationEventType.DISRUPTION_STARTED,
     reason: str | None = "Signal failure",
 ) -> NotificationEvent:
     return NotificationEvent(
         id=7,
         dedupe_key="event-key",
-        line_id="victoria",
+        line_id=line_id,
         event_type=event_type.value,
         observed_at=datetime(2026, 6, 16, 8, 0, tzinfo=UTC),
         severity=6,
@@ -100,9 +101,24 @@ def test_build_apns_payload_for_recovery_event() -> None:
     )
 
     assert payload["aps"]["alert"] == {
-        "title": "Victoria line recovered",
-        "body": "Severe Delays",
+        "title": "Victoria line",
+        "body": "A good service has resumed.",
     }
+
+
+@pytest.mark.parametrize(
+    ("line_id", "title"),
+    [
+        ("hammersmith-city", "Hammersmith & City line disruption"),
+        ("waterloo-city", "Waterloo & City line disruption"),
+        ("dlr", "DLR disruption"),
+        ("tram", "Tram disruption"),
+    ],
+)
+def test_build_apns_payload_formats_line_name_exceptions(line_id: str, title: str) -> None:
+    payload = build_apns_payload(delivery=delivery(), event=event(line_id=line_id))
+
+    assert payload["aps"]["alert"]["title"] == title
 
 
 def test_apns_response_handling_for_success() -> None:

@@ -158,15 +158,15 @@ def build_apns_payload(
     if event.event_type == "test":
         return build_test_apns_payload(device_id=delivery.device_id)
 
-    line_name = _line_display_name(event.line_id)
-    title = (
-        f"{line_name} line recovered"
-        if event.event_type == "service_resumed"
-        else f"{line_name} line disruption"
-    )
-    body = event.status_description
-    if event.reason:
-        body = f"{body}: {event.reason}"
+    title_subject = _line_title_subject(event.line_id)
+    if event.event_type == "service_resumed":
+        title = title_subject
+        body = "A good service has resumed."
+    else:
+        title = f"{title_subject} disruption"
+        body = event.status_description
+        if event.reason:
+            body = f"{body}: {event.reason}"
 
     return {
         "aps": {
@@ -246,6 +246,18 @@ def _base64url(value: bytes) -> str:
 
 
 def _line_display_name(line_id: str) -> str:
-    if line_id == "dlr":
-        return "DLR"
+    match line_id:
+        case "dlr":
+            return "DLR"
+        case "hammersmith-city":
+            return "Hammersmith & City"
+        case "waterloo-city":
+            return "Waterloo & City"
     return line_id.replace("-", " ").title()
+
+
+def _line_title_subject(line_id: str) -> str:
+    line_name = _line_display_name(line_id)
+    if line_id in {"dlr", "tram"}:
+        return line_name
+    return f"{line_name} line"
