@@ -120,8 +120,7 @@ class APNsPushSender(PushSender):
             return PushSendResult(
                 status=PushSendStatus.FAILED,
                 failure_reason=(
-                    "APNs bundle ID is not configured for app variant: "
-                    f"{delivery.app_variant}"
+                    f"APNs bundle ID is not configured for app variant: {delivery.app_variant}"
                 ),
             )
 
