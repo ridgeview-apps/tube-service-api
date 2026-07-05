@@ -72,7 +72,7 @@ async def test_timeline_returns_only_requested_london_day() -> None:
                 ),
                 LineStatusSnapshot(
                     line_id="victoria",
-                    observed_at=datetime(2026, 6, 9, 8, 0, tzinfo=UTC),
+                    observed_at=datetime(2026, 6, 9, 8, 0, 0, 123456, tzinfo=UTC),
                     statuses=[
                         LineStatus(
                             status_severity=6,

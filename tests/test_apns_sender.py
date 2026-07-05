@@ -99,7 +99,7 @@ def test_build_apns_payload_contains_alert_and_safe_metadata() -> None:
         "line_id": "victoria",
         "event_type": "disruption_started",
         "severity": 6,
-        "observed_at": "2026-06-16T08:00:00+00:00",
+        "observed_at": "2026-06-16T08:00:00Z",
     }
     assert "push-token" not in str(payload)
 

@@ -1,7 +1,9 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
+
+from app.datetime_format import utc_seconds_isoformat
 
 
 class DisruptionRead(BaseModel):
@@ -36,6 +38,10 @@ class LineStatusSnapshotRead(BaseModel):
     @classmethod
     def mark_sqlite_timestamps_as_utc(cls, value: datetime) -> datetime:
         return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+    @field_serializer("observed_at", when_used="json")
+    def serialize_observed_at(self, value: datetime) -> str:
+        return utc_seconds_isoformat(value)
 
 
 class DailyTimelineRead(BaseModel):
