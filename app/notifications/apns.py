@@ -8,6 +8,7 @@ from typing import Protocol
 import httpx
 
 from app.config import Settings
+from app.datetime_format import utc_seconds_isoformat
 from app.notifications.models import NotificationDelivery, NotificationEvent
 from app.notifications.schemas import PushPlatform
 from app.notifications.sender import PushSender, PushSendResult, PushSendStatus
@@ -198,7 +199,7 @@ def build_apns_payload(
         "line_id": event.line_id,
         "event_type": event.event_type,
         "severity": event.severity,
-        "observed_at": event.observed_at.isoformat(),
+        "observed_at": utc_seconds_isoformat(event.observed_at),
     }
 
 

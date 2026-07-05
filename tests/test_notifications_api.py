@@ -83,6 +83,9 @@ async def test_registers_notification_device_idempotently() -> None:
     assert second_response.json()["enabled"] is True
     assert second_response.json()["app_version"] == "1.1.0"
     assert second_response.json()["app_variant"] == "production"
+    for field in ("created_at", "updated_at", "last_seen_at"):
+        assert second_response.json()[field].endswith("Z")
+        assert "." not in second_response.json()[field]
 
 
 async def test_registers_notification_device_app_variant() -> None:

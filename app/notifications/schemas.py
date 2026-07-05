@@ -2,8 +2,16 @@ from datetime import datetime, time
 from enum import StrEnum
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
+from app.datetime_format import utc_seconds_isoformat
 from app.line_status.lines import SUPPORTED_LINE_IDS
 
 
@@ -71,6 +79,10 @@ class NotificationDeviceRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_seen_at: datetime
+
+    @field_serializer("created_at", "updated_at", "last_seen_at", when_used="json")
+    def serialize_timestamps(self, value: datetime) -> str:
+        return utc_seconds_isoformat(value)
 
 
 class NotificationLinePreferenceUpdate(BaseModel):
@@ -141,6 +153,10 @@ class NotificationPreferencesRead(NotificationPreferencesBase):
     lines: list[NotificationLinePreferenceRead]
     created_at: datetime
     updated_at: datetime
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_timestamps(self, value: datetime) -> str:
+        return utc_seconds_isoformat(value)
 
 
 class NotificationTestPushRead(BaseModel):
