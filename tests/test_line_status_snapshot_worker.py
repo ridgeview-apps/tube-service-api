@@ -426,6 +426,59 @@ async def test_capture_snapshots_does_not_create_delivery_for_unmatched_preferen
     assert deliveries == []
 
 
+async def test_capture_snapshots_delivers_ongoing_disruption_at_peak_start() -> None:
+    await add_notification_device(schedule_preset="weekday_peak")
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 4, 50, tzinfo=UTC),
+    )
+    client.lines = [line("victoria", "Severe Delays", "Signal failure")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 0, tzinfo=UTC),
+    )
+    pre_peak_events = await stored_notification_events()
+    pre_peak_deliveries = await stored_notification_deliveries()
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 30, tzinfo=UTC),
+    )
+    peak_events = await stored_notification_events()
+    peak_deliveries = await stored_notification_deliveries()
+
+    assert len(pre_peak_events) == 1
+    assert pre_peak_deliveries == []
+    assert len(peak_events) == 1
+    assert len(peak_deliveries) == 1
+    assert peak_deliveries[0].event_id == peak_events[0].id
+    assert peak_deliveries[0].device_id == "install-123"
+
+
+async def test_capture_snapshots_does_not_repeat_ongoing_peak_disruption_delivery() -> None:
+    await add_notification_device(schedule_preset="weekday_peak")
+    client = FakeTflClient([line("victoria", "Severe Delays", "Signal failure")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 30, tzinfo=UTC),
+    )
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 40, tzinfo=UTC),
+    )
+
+    assert len(await stored_notification_events()) == 1
+    assert len(await stored_notification_deliveries()) == 1
+
+
 async def test_capture_snapshots_does_not_duplicate_delivery_for_unchanged_disruption() -> None:
     await add_notification_device()
     client = FakeTflClient([line("victoria")])
