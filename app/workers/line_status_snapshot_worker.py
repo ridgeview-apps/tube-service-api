@@ -16,7 +16,11 @@ from app.line_status.repository import (
     get_latest_snapshots_by_line,
 )
 from app.line_status.time import operational_day_bounds_utc, operational_day_for
-from app.notifications.events import detect_notification_candidate
+from app.notifications.events import (
+    NotificationCandidate,
+    active_disruption_candidate,
+    detect_notification_candidate,
+)
 from app.notifications.matching import matching_delivery_targets
 from app.notifications.repository import (
     create_pending_deliveries,
@@ -38,6 +42,7 @@ WORKER_NAME = "line_status_snapshot_worker"
 
 type _StatusValue = tuple[int, str, str | None, str | None, str | None]
 type _NotificationSnapshotPair = tuple[LineStatusSnapshot | None, LineStatusSnapshot]
+type _NotificationCandidateAt = tuple[NotificationCandidate, datetime]
 
 
 def _utc_now() -> datetime:
@@ -137,6 +142,7 @@ async def _capture_snapshots_once(
         )
         snapshots_to_store: list[LineStatusSnapshot] = []
         notification_snapshot_pairs: list[_NotificationSnapshotPair] = []
+        active_notification_snapshots: list[LineStatusSnapshot] = []
 
         for remote_line in remote_lines:
             latest_local_snapshot = latest_snapshots_by_line.get(remote_line.id)
@@ -144,6 +150,10 @@ async def _capture_snapshots_once(
                 snapshot = _create_snapshot(remote_line, observed_at)
                 snapshots_to_store.append(snapshot)
                 notification_snapshot_pairs.append((latest_local_snapshot, snapshot))
+                if latest_local_snapshot is None:
+                    active_notification_snapshots.append(snapshot)
+            elif latest_local_snapshot is not None:
+                active_notification_snapshots.append(latest_local_snapshot)
 
         missing_baseline_line_ids = sorted(
             set(missing_remote_line_ids) - set(latest_snapshots_by_line)
@@ -170,6 +180,8 @@ async def _capture_snapshots_once(
         await _create_pending_notification_deliveries(
             session=session,
             snapshot_pairs=notification_snapshot_pairs,
+            active_snapshots=active_notification_snapshots,
+            observed_at=observed_at,
         )
 
     return len(snapshots_to_store)
@@ -179,23 +191,43 @@ async def _create_pending_notification_deliveries(
     *,
     session: AsyncSession,
     snapshot_pairs: list[_NotificationSnapshotPair],
+    active_snapshots: list[LineStatusSnapshot],
+    observed_at: datetime,
 ) -> int:
     devices = await get_notification_devices_with_preferences(session)
     delivery_count = 0
 
-    for previous_snapshot, current_snapshot in snapshot_pairs:
-        candidate = detect_notification_candidate(
-            previous_snapshot=previous_snapshot,
-            current_snapshot=current_snapshot,
+    candidates = [
+        candidate
+        for previous_snapshot, current_snapshot in snapshot_pairs
+        if (
+            candidate := detect_notification_candidate(
+                previous_snapshot=previous_snapshot,
+                current_snapshot=current_snapshot,
+            )
         )
-        if candidate is None:
+        is not None
+    ]
+    active_candidates = [
+        candidate
+        for snapshot in active_snapshots
+        if (candidate := active_disruption_candidate(snapshot=snapshot)) is not None
+    ]
+    candidates_at: list[_NotificationCandidateAt] = [
+        (candidate, candidate.observed_at) for candidate in candidates
+    ] + [(candidate, observed_at) for candidate in active_candidates]
+
+    seen_dedupe_keys: set[str] = set()
+    for candidate, checked_at in candidates_at:
+        if candidate.dedupe_key in seen_dedupe_keys:
             continue
+        seen_dedupe_keys.add(candidate.dedupe_key)
 
         event, _ = await get_or_create_notification_event(session, candidate)
         targets = matching_delivery_targets(
             candidate=candidate,
             devices=devices,
-            now=current_snapshot.observed_at,
+            now=checked_at,
         )
         deliveries = await create_pending_deliveries(session, event, targets)
         delivery_count += len(deliveries)

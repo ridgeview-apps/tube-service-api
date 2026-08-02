@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.notifications.events import (
     NotificationEventType,
+    active_disruption_candidate,
     detect_notification_candidate,
 )
 
@@ -39,6 +40,19 @@ def test_baseline_snapshot_does_not_emit_notification_candidate() -> None:
     )
 
     assert candidate is None
+
+
+def test_active_disruption_snapshot_emits_current_disruption_candidate() -> None:
+    candidate = active_disruption_candidate(
+        snapshot=snapshot([status(9, "Minor Delays", reason="Signal failure")])
+    )
+
+    assert candidate is not None
+    assert candidate.line_id == "victoria"
+    assert candidate.event_type == NotificationEventType.DISRUPTION_STARTED
+    assert candidate.severity == 9
+    assert candidate.status_description == "Minor Delays"
+    assert candidate.reason == "Signal failure"
 
 
 def test_good_service_to_disruption_emits_disruption_started() -> None:
@@ -126,3 +140,22 @@ def test_dedupe_key_is_stable_for_the_same_candidate() -> None:
     assert first_candidate is not None
     assert second_candidate is not None
     assert first_candidate.dedupe_key == second_candidate.dedupe_key
+
+
+def test_dedupe_key_is_stable_after_timezone_is_dropped() -> None:
+    aware_candidate = active_disruption_candidate(
+        snapshot=snapshot(
+            [status(6, "Severe Delays", reason="Signal failure")],
+            observed_at=datetime(2026, 6, 16, 8, 5, tzinfo=UTC),
+        )
+    )
+    naive_candidate = active_disruption_candidate(
+        snapshot=snapshot(
+            [status(6, "Severe Delays", reason="Signal failure")],
+            observed_at=datetime(2026, 6, 16, 8, 5),
+        )
+    )
+
+    assert aware_candidate is not None
+    assert naive_candidate is not None
+    assert aware_candidate.dedupe_key == naive_candidate.dedupe_key

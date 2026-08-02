@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from hashlib import sha256
 
+from app.datetime_format import utc_seconds_isoformat
 from app.line_status.models import LineStatus, LineStatusSnapshot
 from app.line_status.severity import DISRUPTION_SEVERITIES, TflRailStatusSeverity
 
@@ -62,6 +63,20 @@ def detect_notification_candidate(
     return None
 
 
+def active_disruption_candidate(
+    *,
+    snapshot: LineStatusSnapshot,
+) -> NotificationCandidate | None:
+    current_disruption = _most_severe_disruption(snapshot.statuses)
+    if current_disruption is None:
+        return None
+    return _candidate(
+        snapshot=snapshot,
+        event_type=NotificationEventType.DISRUPTION_STARTED,
+        status=current_disruption,
+    )
+
+
 def _most_severe_disruption(statuses: list[LineStatus]) -> LineStatus | None:
     disruption_statuses = [
         status for status in statuses if status.status_severity in DISRUPTION_SEVERITIES
@@ -98,7 +113,7 @@ def _candidate(
     key_parts = [
         snapshot.line_id,
         event_type.value,
-        snapshot.observed_at.isoformat(),
+        utc_seconds_isoformat(snapshot.observed_at),
         str(status.status_severity),
         status.status_description,
         status.reason or "",
