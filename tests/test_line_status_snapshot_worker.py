@@ -460,6 +460,77 @@ async def test_capture_snapshots_delivers_ongoing_disruption_at_peak_start() -> 
     assert peak_deliveries[0].device_id == "install-123"
 
 
+async def test_capture_snapshots_skips_recovery_when_pre_peak_disruption_was_not_alerted() -> None:
+    await add_notification_device(schedule_preset="weekday_peak")
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 4, 50, tzinfo=UTC),
+    )
+    client.lines = [line("victoria", "Severe Delays", "Signal failure")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 0, tzinfo=UTC),
+    )
+    client.lines = [line("victoria")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 31, tzinfo=UTC),
+    )
+
+    events = await stored_notification_events()
+    deliveries = await stored_notification_deliveries()
+
+    assert [event.event_type for event in events] == [
+        "disruption_started",
+        "service_resumed",
+    ]
+    assert deliveries == []
+
+
+async def test_capture_snapshots_delivers_recovery_after_ongoing_peak_alert() -> None:
+    await add_notification_device(schedule_preset="weekday_peak")
+    client = FakeTflClient([line("victoria")])
+
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 4, 50, tzinfo=UTC),
+    )
+    client.lines = [line("victoria", "Severe Delays", "Signal failure")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 0, tzinfo=UTC),
+    )
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 30, tzinfo=UTC),
+    )
+    client.lines = [line("victoria")]
+    await capture_snapshots_once(
+        client,
+        session_factory=db_session_factory,
+        now=lambda: datetime(2026, 6, 9, 5, 31, tzinfo=UTC),
+    )
+
+    events = await stored_notification_events()
+    deliveries = await stored_notification_deliveries()
+
+    assert [event.event_type for event in events] == [
+        "disruption_started",
+        "service_resumed",
+    ]
+    assert len(deliveries) == 2
+    assert deliveries[0].event_id == events[0].id
+    assert deliveries[1].event_id == events[1].id
+
+
 async def test_capture_snapshots_does_not_repeat_ongoing_peak_disruption_delivery() -> None:
     await add_notification_device(schedule_preset="weekday_peak")
     client = FakeTflClient([line("victoria", "Severe Delays", "Signal failure")])

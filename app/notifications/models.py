@@ -70,6 +70,18 @@ class NotificationLinePreference(Base):
     preferences: Mapped[NotificationPreferences] = relationship(back_populates="lines")
 
 
+class NotificationLineDisruptionState(Base):
+    __tablename__ = "notification_line_disruption_states"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("notification_devices.device_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    line_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class NotificationEvent(Base):
     __tablename__ = "notification_events"
 

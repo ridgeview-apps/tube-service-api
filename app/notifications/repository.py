@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,6 +10,7 @@ from app.notifications.models import (
     NotificationDelivery,
     NotificationDevice,
     NotificationEvent,
+    NotificationLineDisruptionState,
     NotificationLinePreference,
     NotificationPreferences,
 )
@@ -267,6 +268,72 @@ async def create_pending_deliveries(
     for delivery in deliveries:
         await session.refresh(delivery)
     return deliveries
+
+
+async def get_device_ids_notified_of_active_disruption(
+    session: AsyncSession,
+    *,
+    line_id: str,
+) -> set[str]:
+    return set(
+        (
+            await session.scalars(
+                select(NotificationLineDisruptionState.device_id).where(
+                    NotificationLineDisruptionState.line_id == line_id,
+                )
+            )
+        ).all()
+    )
+
+
+async def record_active_disruption_notifications(
+    session: AsyncSession,
+    *,
+    line_id: str,
+    device_ids: set[str],
+    opened_at: datetime,
+) -> None:
+    if not device_ids:
+        return
+
+    existing_states = {
+        state.device_id: state
+        for state in (
+            await session.scalars(
+                select(NotificationLineDisruptionState).where(
+                    NotificationLineDisruptionState.line_id == line_id,
+                    NotificationLineDisruptionState.device_id.in_(device_ids),
+                )
+            )
+        ).all()
+    }
+    for device_id in device_ids:
+        state = existing_states.get(device_id)
+        if state is None:
+            session.add(
+                NotificationLineDisruptionState(
+                    device_id=device_id,
+                    line_id=line_id,
+                    opened_at=opened_at,
+                    updated_at=opened_at,
+                )
+            )
+        else:
+            state.updated_at = opened_at
+    await session.commit()
+
+
+async def clear_active_disruption_notifications(
+    session: AsyncSession,
+    *,
+    line_id: str,
+) -> None:
+    await session.execute(
+        delete(NotificationLineDisruptionState).where(
+            NotificationLineDisruptionState.line_id == line_id,
+        )
+    )
+    await session.commit()
 
 
 async def get_pending_deliveries(

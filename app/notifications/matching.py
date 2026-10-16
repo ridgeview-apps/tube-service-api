@@ -27,6 +27,7 @@ def matching_delivery_targets(
     candidate: NotificationCandidate,
     devices: list[NotificationDevice],
     now: datetime | None = None,
+    notified_disruption_device_ids: set[str] | None = None,
 ) -> list[NotificationDeliveryTarget]:
     return [
         NotificationDeliveryTarget(
@@ -36,7 +37,12 @@ def matching_delivery_targets(
             app_variant=device.app_variant,
         )
         for device in devices
-        if device_matches_candidate(candidate=candidate, device=device, now=now)
+        if device_matches_candidate(
+            candidate=candidate,
+            device=device,
+            now=now,
+            notified_disruption_device_ids=notified_disruption_device_ids,
+        )
     ]
 
 
@@ -45,6 +51,7 @@ def device_matches_candidate(
     candidate: NotificationCandidate,
     device: NotificationDevice,
     now: datetime | None = None,
+    notified_disruption_device_ids: set[str] | None = None,
 ) -> bool:
     preferences = device.preferences
     if not device.enabled or preferences is None:
@@ -57,6 +64,11 @@ def device_matches_candidate(
         return False
     if candidate.event_type == NotificationEventType.SERVICE_RESUMED:
         if not line_preferences.notify_recoveries:
+            return False
+        if (
+            notified_disruption_device_ids is not None
+            and device.device_id not in notified_disruption_device_ids
+        ):
             return False
     elif not _severity_matches_threshold(candidate.severity, line_preferences.severity_threshold):
         return False

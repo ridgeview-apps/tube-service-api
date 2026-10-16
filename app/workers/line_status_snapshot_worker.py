@@ -18,14 +18,18 @@ from app.line_status.repository import (
 from app.line_status.time import operational_day_bounds_utc, operational_day_for
 from app.notifications.events import (
     NotificationCandidate,
+    NotificationEventType,
     active_disruption_candidate,
     detect_notification_candidate,
 )
 from app.notifications.matching import matching_delivery_targets
 from app.notifications.repository import (
+    clear_active_disruption_notifications,
     create_pending_deliveries,
+    get_device_ids_notified_of_active_disruption,
     get_notification_devices_with_preferences,
     get_or_create_notification_event,
+    record_active_disruption_notifications,
 )
 from app.operations.repository import (
     record_worker_failure,
@@ -224,12 +228,30 @@ async def _create_pending_notification_deliveries(
         seen_dedupe_keys.add(candidate.dedupe_key)
 
         event, _ = await get_or_create_notification_event(session, candidate)
+        notified_disruption_device_ids = (
+            await get_device_ids_notified_of_active_disruption(
+                session,
+                line_id=candidate.line_id,
+            )
+            if candidate.event_type == NotificationEventType.SERVICE_RESUMED
+            else None
+        )
         targets = matching_delivery_targets(
             candidate=candidate,
             devices=devices,
             now=checked_at,
+            notified_disruption_device_ids=notified_disruption_device_ids,
         )
         deliveries = await create_pending_deliveries(session, event, targets)
+        if candidate.event_type == NotificationEventType.SERVICE_RESUMED:
+            await clear_active_disruption_notifications(session, line_id=candidate.line_id)
+        else:
+            await record_active_disruption_notifications(
+                session,
+                line_id=candidate.line_id,
+                device_ids={delivery.device_id for delivery in deliveries},
+                opened_at=candidate.observed_at,
+            )
         delivery_count += len(deliveries)
 
     return delivery_count
