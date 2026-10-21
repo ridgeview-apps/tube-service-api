@@ -160,5 +160,10 @@ def _window_contains(
     window: NotificationScheduleWindow,
     checked_at: datetime,
 ) -> bool:
-    weekday = checked_at.strftime("%a").lower()
-    return weekday in window.days and window.start_time <= checked_at.time() < window.end_time
+    day_of_week = checked_at.strftime("%a").lower()
+    is_correct_day = day_of_week in window.days
+    is_within_time_range = (
+        window.start_time <= checked_at.time()
+        and checked_at.time() < window.end_time
+    )
+    return is_correct_day and is_within_time_range
