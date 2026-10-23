@@ -65,8 +65,7 @@ class NotificationLinePreference(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     severity_threshold: Mapped[str] = mapped_column(String(32))
     notify_recoveries: Mapped[bool] = mapped_column(Boolean, default=True)
-    schedule_preset: Mapped[str] = mapped_column(String(32))
-    custom_schedules: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    schedules: Mapped[list[dict[str, object]]] = mapped_column(JSON)
     preferences: Mapped[NotificationPreferences] = relationship(back_populates="lines")
 
 

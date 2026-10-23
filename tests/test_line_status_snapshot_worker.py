@@ -126,7 +126,7 @@ async def add_notification_device(
     *,
     device_id: str = "install-123",
     line_ids: list[str] | None = None,
-    schedule_preset: str = "anytime",
+    schedules: list[dict[str, object]] | None = None,
 ) -> None:
     now = datetime(2026, 6, 9, 7, 0, tzinfo=UTC)
     async with db_session_factory() as session:
@@ -152,8 +152,13 @@ async def add_notification_device(
                             enabled=True,
                             severity_threshold="minor_delays",
                             notify_recoveries=True,
-                            schedule_preset=schedule_preset,
-                            custom_schedules=[],
+                            schedules=schedules
+                            or [
+                                {
+                                    "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                                    "all_day": True,
+                                }
+                            ],
                         )
                         for line_id in (line_ids or ["victoria"])
                     ],
@@ -427,7 +432,14 @@ async def test_capture_snapshots_does_not_create_delivery_for_unmatched_preferen
 
 
 async def test_capture_snapshots_delivers_ongoing_disruption_at_peak_start() -> None:
-    await add_notification_device(schedule_preset="weekday_peak")
+    await add_notification_device(
+        schedules=[
+            {
+                "days": ["mon", "tue", "wed", "thu", "fri"],
+                "windows": [{"start_time": "06:30", "end_time": "09:30"}],
+            }
+        ]
+    )
     client = FakeTflClient([line("victoria")])
 
     await capture_snapshots_once(
@@ -461,7 +473,14 @@ async def test_capture_snapshots_delivers_ongoing_disruption_at_peak_start() -> 
 
 
 async def test_capture_snapshots_skips_recovery_when_pre_peak_disruption_was_not_alerted() -> None:
-    await add_notification_device(schedule_preset="weekday_peak")
+    await add_notification_device(
+        schedules=[
+            {
+                "days": ["mon", "tue", "wed", "thu", "fri"],
+                "windows": [{"start_time": "06:30", "end_time": "09:30"}],
+            }
+        ]
+    )
     client = FakeTflClient([line("victoria")])
 
     await capture_snapshots_once(
@@ -493,7 +512,14 @@ async def test_capture_snapshots_skips_recovery_when_pre_peak_disruption_was_not
 
 
 async def test_capture_snapshots_delivers_recovery_after_ongoing_peak_alert() -> None:
-    await add_notification_device(schedule_preset="weekday_peak")
+    await add_notification_device(
+        schedules=[
+            {
+                "days": ["mon", "tue", "wed", "thu", "fri"],
+                "windows": [{"start_time": "06:30", "end_time": "09:30"}],
+            }
+        ]
+    )
     client = FakeTflClient([line("victoria")])
 
     await capture_snapshots_once(
@@ -532,7 +558,14 @@ async def test_capture_snapshots_delivers_recovery_after_ongoing_peak_alert() ->
 
 
 async def test_capture_snapshots_does_not_repeat_ongoing_peak_disruption_delivery() -> None:
-    await add_notification_device(schedule_preset="weekday_peak")
+    await add_notification_device(
+        schedules=[
+            {
+                "days": ["mon", "tue", "wed", "thu", "fri"],
+                "windows": [{"start_time": "06:30", "end_time": "09:30"}],
+            }
+        ]
+    )
     client = FakeTflClient([line("victoria", "Severe Delays", "Signal failure")])
 
     await capture_snapshots_once(

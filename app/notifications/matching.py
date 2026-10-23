@@ -1,16 +1,15 @@
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.line_status.severity import TflRailStatusSeverity
 from app.notifications.events import NotificationCandidate, NotificationEventType
 from app.notifications.models import NotificationDevice, NotificationLinePreference
 from app.notifications.schemas import (
-    NotificationSchedulePreset,
+    NotificationSchedule,
     NotificationScheduleWindow,
     NotificationSeverityThreshold,
     PushPlatform,
-    Weekday,
 )
 
 
@@ -106,52 +105,28 @@ def _within_schedule(
     except ZoneInfoNotFoundError:
         return False
 
-    match NotificationSchedulePreset(line_preferences.schedule_preset):
-        case NotificationSchedulePreset.ANYTIME:
-            return True
-        case NotificationSchedulePreset.WEEKDAY_ALL_DAY:
-            return local_time.weekday() < 5
-        case NotificationSchedulePreset.WEEKENDS:
-            return local_time.weekday() >= 5
-        case NotificationSchedulePreset.WEEKDAY_PEAK:
-            windows = _weekday_peak_windows()
-        case NotificationSchedulePreset.CUSTOM:
-            windows = [
-                NotificationScheduleWindow.model_validate(schedule)
-                for schedule in line_preferences.custom_schedules
-            ]
-
-    return any(_window_contains(window=window, checked_at=local_time) for window in windows)
-
-
-def _weekday_peak_windows() -> list[NotificationScheduleWindow]:
-    return [
-        _window(
-            start_time=time(6, 30),
-            end_time=time(9, 30),
-        ),
-        _window(
-            start_time=time(16, 0),
-            end_time=time(19, 0),
-        ),
+    schedules = [
+        NotificationSchedule.model_validate(schedule)
+        for schedule in line_preferences.schedules
     ]
+    return any(
+        _schedule_contains(schedule=schedule, checked_at=local_time)
+        for schedule in schedules
+    )
 
 
-def _window(
+def _schedule_contains(
     *,
-    start_time: time,
-    end_time: time,
-) -> NotificationScheduleWindow:
-    return NotificationScheduleWindow(
-        days=[
-            Weekday.MON,
-            Weekday.TUE,
-            Weekday.WED,
-            Weekday.THU,
-            Weekday.FRI,
-        ],
-        start_time=start_time,
-        end_time=end_time,
+    schedule: NotificationSchedule,
+    checked_at: datetime,
+) -> bool:
+    day_of_week = checked_at.strftime("%a").lower()
+    if day_of_week not in schedule.days:
+        return False
+    if schedule.all_day:
+        return True
+    return any(
+        _window_contains(window=window, checked_at=checked_at) for window in schedule.windows
     )
 
 
@@ -160,10 +135,8 @@ def _window_contains(
     window: NotificationScheduleWindow,
     checked_at: datetime,
 ) -> bool:
-    day_of_week = checked_at.strftime("%a").lower()
-    is_correct_day = day_of_week in window.days
     is_within_time_range = (
         window.start_time <= checked_at.time()
         and checked_at.time() < window.end_time
     )
-    return is_correct_day and is_within_time_range
+    return is_within_time_range

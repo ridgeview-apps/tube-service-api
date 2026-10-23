@@ -147,10 +147,7 @@ async def upsert_preferences(
         line.enabled = line_update.enabled
         line.severity_threshold = line_update.severity_threshold.value
         line.notify_recoveries = line_update.notify_recoveries
-        line.schedule_preset = line_update.schedule_preset.value
-        line.custom_schedules = [
-            schedule.model_dump(mode="json") for schedule in line_update.custom_schedules
-        ]
+        line.schedules = [schedule.model_dump(mode="json") for schedule in line_update.schedules]
         updated_lines.append(line)
     preferences.lines = updated_lines
 
