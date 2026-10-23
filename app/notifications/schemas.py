@@ -152,6 +152,27 @@ class NotificationLinePreferenceUpdate(BaseModel):
             raise ValueError(f"Unsupported line ID: {value}")
         return value
 
+
+class NotificationLinePreferencePatch(BaseModel):
+    """The mutable fields of a line preference in a merge-patch request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    severity_threshold: NotificationSeverityThreshold | None = None
+    notify_recoveries: bool | None = None
+    schedules: list[NotificationSchedule] | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+    @model_validator(mode="after")
+    def reject_null_fields(self) -> "NotificationLinePreferencePatch":
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError("Line preference fields cannot be null")
+        return self
+
+
 class NotificationPreferencesBase(BaseModel):
     timezone: str = "Europe/London"
 
@@ -178,6 +199,30 @@ class NotificationPreferencesUpdate(NotificationPreferencesBase):
         if len(line_ids) != len(set(line_ids)):
             raise ValueError("Duplicate line IDs are not allowed")
         return value
+
+
+class NotificationPreferencesPatch(BaseModel):
+    """RFC 7396 patch document for the per-line preference collection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lines: dict[str, NotificationLinePreferencePatch | None] = Field(default_factory=dict)
+
+    @field_validator("lines")
+    @classmethod
+    def normalize_and_validate_line_ids(
+        cls,
+        value: dict[str, NotificationLinePreferencePatch | None],
+    ) -> dict[str, NotificationLinePreferencePatch | None]:
+        normalized: dict[str, NotificationLinePreferencePatch | None] = {}
+        for line_id, patch in value.items():
+            normalized_line_id = line_id.lower()
+            if normalized_line_id not in SUPPORTED_LINE_IDS:
+                raise ValueError(f"Unsupported line ID: {normalized_line_id}")
+            if normalized_line_id in normalized:
+                raise ValueError("Duplicate normalized line IDs are not allowed")
+            normalized[normalized_line_id] = patch
+        return normalized
 
 
 class NotificationLinePreferenceRead(NotificationLinePreferenceUpdate):

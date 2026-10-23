@@ -16,6 +16,7 @@ from app.notifications.models import (
 )
 from app.notifications.schemas import (
     NotificationDeviceRegistration,
+    NotificationPreferencesPatch,
     NotificationPreferencesUpdate,
 )
 
@@ -150,6 +151,69 @@ async def upsert_preferences(
         line.schedules = [schedule.model_dump(mode="json") for schedule in line_update.schedules]
         updated_lines.append(line)
     preferences.lines = updated_lines
+
+    await session.commit()
+    await session.refresh(preferences)
+    return preferences
+
+
+async def patch_preferences(
+    session: AsyncSession,
+    device_id: str,
+    patch: NotificationPreferencesPatch,
+) -> NotificationPreferences | None:
+    """Apply a per-line JSON Merge Patch without changing unmentioned lines."""
+    device = await get_device(session, device_id)
+    if device is None:
+        return None
+
+    preferences = await get_preferences(session, device_id)
+    existing_lines = (
+        {} if preferences is None else {line.line_id: line for line in preferences.lines}
+    )
+    required_fields = {
+        "enabled",
+        "severity_threshold",
+        "notify_recoveries",
+        "schedules",
+    }
+    for line_id, line_patch in patch.lines.items():
+        if line_patch is None or line_id in existing_lines:
+            continue
+        if not required_fields.issubset(line_patch.model_fields_set):
+            raise ValueError("New line preferences require every field")
+
+    now = utc_now()
+    if preferences is None:
+        preferences = NotificationPreferences(
+            device_id=device_id,
+            timezone="Europe/London",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(preferences)
+    else:
+        preferences.updated_at = now
+
+    for line_id, line_patch in patch.lines.items():
+        line = existing_lines.get(line_id)
+        if line_patch is None:
+            if line is not None:
+                preferences.lines.remove(line)
+            continue
+
+        if line is None:
+            line = NotificationLinePreference(device_id=device_id, line_id=line_id)
+            preferences.lines.append(line)
+
+        if "enabled" in line_patch.model_fields_set:
+            line.enabled = line_patch.enabled
+        if "severity_threshold" in line_patch.model_fields_set:
+            line.severity_threshold = line_patch.severity_threshold.value
+        if "notify_recoveries" in line_patch.model_fields_set:
+            line.notify_recoveries = line_patch.notify_recoveries
+        if "schedules" in line_patch.model_fields_set:
+            line.schedules = [schedule.model_dump(mode="json") for schedule in line_patch.schedules]
 
     await session.commit()
     await session.refresh(preferences)

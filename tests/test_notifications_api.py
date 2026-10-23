@@ -114,6 +114,20 @@ def test_notification_schedule_time_openapi_docs() -> None:
     }
 
 
+def test_notification_preferences_patch_openapi_examples() -> None:
+    request_body = app.openapi()["paths"]["/v1/notification-devices/{device_id}/preferences"][
+        "patch"
+    ]["requestBody"]
+    merge_patch_content = request_body["content"]["application/merge-patch+json"]
+
+    assert merge_patch_content["examples"]["update-and-remove"]["value"] == {
+        "lines": {"victoria": {"enabled": False}, "central": None}
+    }
+    assert merge_patch_content["examples"]["add-line"]["value"]["lines"]["victoria"]["schedules"][
+        0
+    ]["windows"] == [{"start_time": "06:30", "end_time": "09:30"}]
+
+
 async def test_registers_notification_device_app_variant() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -416,6 +430,135 @@ async def test_updating_preferences_replaces_omitted_lines() -> None:
 
     assert update_response.status_code == 200
     assert [line["line_id"] for line in read_response.json()["lines"]] == ["central"]
+
+
+async def test_patch_preferences_updates_only_the_targeted_line() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={
+                "lines": [
+                    {
+                        "line_id": "victoria",
+                        "enabled": True,
+                        "schedules": [{"days": ["mon"], "all_day": True}],
+                    },
+                    {
+                        "line_id": "central",
+                        "enabled": True,
+                        "schedules": [{"days": ["tue"], "all_day": True}],
+                    },
+                ]
+            },
+        )
+        response = await client.patch(
+            "/v1/notification-devices/install-123/preferences",
+            headers={"Content-Type": "application/merge-patch+json"},
+            json={"lines": {"victoria": {"enabled": False}}},
+        )
+
+    assert response.status_code == 200
+    lines = {line["line_id"]: line for line in response.json()["lines"]}
+    assert lines["victoria"]["enabled"] is False
+    assert lines["victoria"]["schedules"] == [{"days": ["mon"], "all_day": True, "windows": []}]
+    assert lines["central"]["enabled"] is True
+    assert lines["central"]["schedules"] == [{"days": ["tue"], "all_day": True, "windows": []}]
+
+
+async def test_patch_preferences_removes_a_line_with_null() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={
+                "lines": [
+                    {"line_id": "victoria", "schedules": [{"days": ["mon"], "all_day": True}]},
+                    {"line_id": "central", "schedules": [{"days": ["mon"], "all_day": True}]},
+                ]
+            },
+        )
+        response = await client.patch(
+            "/v1/notification-devices/install-123/preferences",
+            headers={"Content-Type": "application/merge-patch+json"},
+            json={"lines": {"central": None}},
+        )
+
+    assert response.status_code == 200
+    assert [line["line_id"] for line in response.json()["lines"]] == ["victoria"]
+
+
+async def test_patch_preferences_adds_a_fully_specified_line() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.patch(
+            "/v1/notification-devices/install-123/preferences",
+            headers={"Content-Type": "application/merge-patch+json"},
+            json={
+                "lines": {
+                    "victoria": {
+                        "enabled": False,
+                        "severity_threshold": "severe_delays",
+                        "notify_recoveries": False,
+                        "schedules": [{"days": ["sat"], "all_day": True}],
+                    }
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["lines"][0]["line_id"] == "victoria"
+    assert response.json()["lines"][0]["severity_threshold"] == "severe_delays"
+
+
+async def test_patch_preferences_rejects_partially_specified_new_line() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.patch(
+            "/v1/notification-devices/install-123/preferences",
+            headers={"Content-Type": "application/merge-patch+json"},
+            json={"lines": {"victoria": {"enabled": False}}},
+        )
+
+    assert response.status_code == 422
+
+
+async def test_patch_preferences_rejects_unknown_line_id() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.patch(
+            "/v1/notification-devices/install-123/preferences",
+            headers={"Content-Type": "application/merge-patch+json"},
+            json={"lines": {"imaginary": None}},
+        )
+
+    assert response.status_code == 422
+
+
+async def test_patch_preferences_returns_not_found_for_unknown_device() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            "/v1/notification-devices/unknown/preferences",
+            headers={"Content-Type": "application/merge-patch+json"},
+            json={"lines": {}},
+        )
+
+    assert response.status_code == 404
 
 
 async def test_disables_notification_device_without_changing_line_preferences() -> None:
