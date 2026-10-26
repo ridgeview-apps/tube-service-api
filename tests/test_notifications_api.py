@@ -88,6 +88,26 @@ async def test_registers_notification_device_idempotently() -> None:
         assert "." not in second_response.json()[field]
 
 
+async def test_reregistering_disabled_device_preserves_enabled_state() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "first-token"},
+        )
+        disable_response = await client.post("/v1/notification-devices/install-123/disable")
+        reregister_response = await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "rotated-token"},
+        )
+
+    assert disable_response.status_code == 200
+    assert reregister_response.status_code == 200
+    assert reregister_response.json()["enabled"] is False
+
+
 def test_notification_schedule_time_openapi_docs() -> None:
     schemas = app.openapi()["components"]["schemas"]
     input_properties = schemas["NotificationScheduleWindow-Input"]["properties"]

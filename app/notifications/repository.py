@@ -90,7 +90,6 @@ async def upsert_device(
     else:
         device.platform = registration.platform.value
         device.push_token = registration.push_token
-        device.enabled = True
         device.app_version = registration.app_version
         device.app_variant = registration.app_variant
         device.updated_at = now
