@@ -106,12 +106,10 @@ def _within_schedule(
         return False
 
     schedules = [
-        NotificationSchedule.model_validate(schedule)
-        for schedule in line_preferences.schedules
+        NotificationSchedule.model_validate(schedule) for schedule in line_preferences.schedules
     ]
     return any(
-        _schedule_contains(schedule=schedule, checked_at=local_time)
-        for schedule in schedules
+        _schedule_contains(schedule=schedule, checked_at=local_time) for schedule in schedules
     )
 
 
@@ -136,7 +134,6 @@ def _window_contains(
     checked_at: datetime,
 ) -> bool:
     is_within_time_range = (
-        window.start_time <= checked_at.time()
-        and checked_at.time() < window.end_time
+        window.start_time <= checked_at.time() and checked_at.time() < window.end_time
     )
     return is_within_time_range
