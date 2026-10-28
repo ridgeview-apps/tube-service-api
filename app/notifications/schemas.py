@@ -1,11 +1,13 @@
 from datetime import datetime, time
 from enum import StrEnum
+from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    WithJsonSchema,
     field_serializer,
     field_validator,
     model_validator,
@@ -26,14 +28,6 @@ class NotificationSeverityThreshold(StrEnum):
     SUSPENDED = "suspended"
 
 
-class NotificationSchedulePreset(StrEnum):
-    ANYTIME = "anytime"
-    WEEKDAY_PEAK = "weekday_peak"
-    WEEKDAY_ALL_DAY = "weekday_all_day"
-    WEEKENDS = "weekends"
-    CUSTOM = "custom"
-
-
 class Weekday(StrEnum):
     MON = "mon"
     TUE = "tue"
@@ -45,9 +39,61 @@ class Weekday(StrEnum):
 
 
 class NotificationScheduleWindow(BaseModel):
+    start_time: Annotated[
+        time,
+        WithJsonSchema(
+            {
+                "type": "string",
+                "pattern": r"^\d{2}:\d{2}$",
+                "description": "Always returned in HH:mm format.",
+                "examples": ["06:30"],
+            },
+            mode="serialization",
+        ),
+    ] = Field(
+        description=(
+            "A local time. Send HH:mm; seconds are accepted and discarded. "
+            "Always returned in HH:mm format."
+        )
+    )
+    end_time: Annotated[
+        time,
+        WithJsonSchema(
+            {
+                "type": "string",
+                "pattern": r"^\d{2}:\d{2}$",
+                "description": "Always returned in HH:mm format.",
+                "examples": ["09:30"],
+            },
+            mode="serialization",
+        ),
+    ] = Field(
+        description=(
+            "A local time. Send HH:mm; seconds are accepted and discarded. "
+            "Always returned in HH:mm format."
+        )
+    )
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def remove_seconds(cls, value: time) -> time:
+        return value.replace(second=0, microsecond=0)
+
+    @model_validator(mode="after")
+    def require_forward_time_window(self) -> "NotificationScheduleWindow":
+        if self.start_time >= self.end_time:
+            raise ValueError("Schedule start_time must be before end_time")
+        return self
+
+    @field_serializer("start_time", "end_time", when_used="json")
+    def serialize_time(self, value: time) -> str:
+        return value.strftime("%H:%M")
+
+
+class NotificationSchedule(BaseModel):
     days: list[Weekday] = Field(min_length=1)
-    start_time: time
-    end_time: time
+    all_day: bool = False
+    windows: list[NotificationScheduleWindow] = Field(default_factory=list)
 
     @field_validator("days")
     @classmethod
@@ -55,9 +101,11 @@ class NotificationScheduleWindow(BaseModel):
         return list(dict.fromkeys(value))
 
     @model_validator(mode="after")
-    def require_forward_time_window(self) -> "NotificationScheduleWindow":
-        if self.start_time >= self.end_time:
-            raise ValueError("Schedule start_time must be before end_time")
+    def require_all_day_or_windows(self) -> "NotificationSchedule":
+        if self.all_day and self.windows:
+            raise ValueError("all_day schedules cannot include windows")
+        if not self.all_day and not self.windows:
+            raise ValueError("Schedules must be all_day or include at least one window")
         return self
 
 
@@ -90,8 +138,7 @@ class NotificationLinePreferenceUpdate(BaseModel):
     line_id: str
     severity_threshold: NotificationSeverityThreshold = NotificationSeverityThreshold.MINOR_DELAYS
     notify_recoveries: bool = True
-    schedule_preset: NotificationSchedulePreset = NotificationSchedulePreset.WEEKDAY_PEAK
-    custom_schedules: list[NotificationScheduleWindow] = Field(default_factory=list)
+    schedules: list[NotificationSchedule] = Field(min_length=1)
 
     @field_validator("line_id", mode="before")
     @classmethod
@@ -105,12 +152,24 @@ class NotificationLinePreferenceUpdate(BaseModel):
             raise ValueError(f"Unsupported line ID: {value}")
         return value
 
+
+class NotificationLinePreferencePatch(BaseModel):
+    """The mutable fields of a line preference in a merge-patch request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    severity_threshold: NotificationSeverityThreshold | None = None
+    notify_recoveries: bool | None = None
+    schedules: list[NotificationSchedule] | None = Field(
+        default=None,
+        min_length=1,
+    )
+
     @model_validator(mode="after")
-    def require_custom_schedules_for_custom_preset(self) -> "NotificationLinePreferenceUpdate":
-        if self.schedule_preset == NotificationSchedulePreset.CUSTOM and not self.custom_schedules:
-            raise ValueError("custom_schedules is required for the custom preset")
-        if self.schedule_preset != NotificationSchedulePreset.CUSTOM:
-            self.custom_schedules = []
+    def reject_null_fields(self) -> "NotificationLinePreferencePatch":
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError("Line preference fields cannot be null")
         return self
 
 
@@ -140,6 +199,30 @@ class NotificationPreferencesUpdate(NotificationPreferencesBase):
         if len(line_ids) != len(set(line_ids)):
             raise ValueError("Duplicate line IDs are not allowed")
         return value
+
+
+class NotificationPreferencesPatch(BaseModel):
+    """RFC 7396 patch document for the per-line preference collection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lines: dict[str, NotificationLinePreferencePatch | None] = Field(default_factory=dict)
+
+    @field_validator("lines")
+    @classmethod
+    def normalize_and_validate_line_ids(
+        cls,
+        value: dict[str, NotificationLinePreferencePatch | None],
+    ) -> dict[str, NotificationLinePreferencePatch | None]:
+        normalized: dict[str, NotificationLinePreferencePatch | None] = {}
+        for line_id, patch in value.items():
+            normalized_line_id = line_id.lower()
+            if normalized_line_id not in SUPPORTED_LINE_IDS:
+                raise ValueError(f"Unsupported line ID: {normalized_line_id}")
+            if normalized_line_id in normalized:
+                raise ValueError("Duplicate normalized line IDs are not allowed")
+            normalized[normalized_line_id] = patch
+        return normalized
 
 
 class NotificationLinePreferenceRead(NotificationLinePreferenceUpdate):

@@ -40,8 +40,7 @@ def device(
     severity_threshold: str = "minor_delays",
     notify_recoveries: bool = True,
     timezone: str = "Europe/London",
-    schedule_preset: str = "anytime",
-    custom_schedules: list[dict[str, object]] | None = None,
+    schedules: list[dict[str, object]] | None = None,
 ) -> NotificationDevice:
     notification_device = NotificationDevice(
         device_id=device_id,
@@ -66,8 +65,8 @@ def device(
                 enabled=line_enabled,
                 severity_threshold=severity_threshold,
                 notify_recoveries=notify_recoveries,
-                schedule_preset=schedule_preset,
-                custom_schedules=custom_schedules or [],
+                schedules=schedules
+                or [{"days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "all_day": True}],
             )
             for line_id in (line_ids or ["victoria"])
         ],
@@ -162,8 +161,18 @@ def test_recovery_events_use_recovery_preference_not_severity_threshold() -> Non
     )
 
 
-def test_weekday_peak_schedule_matches_morning_and_evening_windows() -> None:
-    notification_device = device(schedule_preset="weekday_peak")
+def test_schedule_matches_multiple_windows_on_selected_days() -> None:
+    notification_device = device(
+        schedules=[
+            {
+                "days": ["mon", "tue", "wed", "thu", "fri"],
+                "windows": [
+                    {"start_time": "06:30", "end_time": "09:30"},
+                    {"start_time": "16:00", "end_time": "19:00"},
+                ],
+            }
+        ]
+    )
 
     assert device_matches_candidate(
         candidate=candidate(),
@@ -182,46 +191,57 @@ def test_weekday_peak_schedule_matches_morning_and_evening_windows() -> None:
     )
 
 
-def test_weekday_peak_schedule_excludes_weekends() -> None:
+def test_schedule_excludes_unselected_days() -> None:
     assert not device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_peak"),
+        device=device(
+            schedules=[
+                {
+                    "days": ["mon", "tue", "wed", "thu", "fri"],
+                    "windows": [{"start_time": "06:30", "end_time": "09:30"}],
+                }
+            ]
+        ),
         now=datetime(2026, 6, 20, 8, 0, tzinfo=UTC),
     )
 
 
-def test_weekday_all_day_matches_only_weekdays() -> None:
+def test_all_day_schedule_matches_only_selected_days() -> None:
     assert device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_all_day"),
+        device=device(schedules=[{"days": ["mon", "tue", "wed", "thu", "fri"], "all_day": True}]),
         now=datetime(2026, 6, 16, 2, 0, tzinfo=UTC),
     )
     assert device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_all_day"),
+        device=device(schedules=[{"days": ["mon", "tue", "wed", "thu", "fri"], "all_day": True}]),
         now=datetime(2026, 6, 16, 22, 0, tzinfo=UTC),
     )
     assert not device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekday_all_day"),
+        device=device(schedules=[{"days": ["mon", "tue", "wed", "thu", "fri"], "all_day": True}]),
         now=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
     )
 
 
-def test_weekends_matches_only_saturday_and_sunday() -> None:
+def test_multiple_independent_schedule_rules_match() -> None:
+    schedules = [
+        {"days": ["sat"], "all_day": True},
+        {"days": ["sun"], "windows": [{"start_time": "12:00", "end_time": "13:00"}]},
+    ]
     assert device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekends"),
+        device=device(schedules=schedules),
         now=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
     )
     assert device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekends"),
-        now=datetime(2026, 6, 21, 12, 0, tzinfo=UTC),
+        device=device(schedules=schedules),
+        now=datetime(2026, 6, 21, 11, 0, tzinfo=UTC),
     )
     assert not device_matches_candidate(
         candidate=candidate(),
-        device=device(schedule_preset="weekends"),
+        device=device(schedules=schedules),
         now=datetime(2026, 6, 22, 12, 0, tzinfo=UTC),
     )
 
@@ -229,12 +249,10 @@ def test_weekends_matches_only_saturday_and_sunday() -> None:
 def test_custom_schedule_uses_device_timezone() -> None:
     notification_device = device(
         timezone="Europe/London",
-        schedule_preset="custom",
-        custom_schedules=[
+        schedules=[
             {
                 "days": ["tue"],
-                "start_time": "08:00:00",
-                "end_time": "09:00:00",
+                "windows": [{"start_time": "08:00:00", "end_time": "09:00:00"}],
             }
         ],
     )

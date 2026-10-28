@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.security import require_api_key
 from app.database import Base, get_session
+from app.datetime_format import utc_seconds_isoformat
 from app.line_status.cache import daily_disruption_summary_cache, daily_timeline_cache
 from app.line_status.lines import SUPPORTED_LINE_IDS
 from app.line_status.models import LineStatus, LineStatusSnapshot
@@ -508,8 +509,8 @@ async def test_disruption_summary_defaults_to_current_and_rejects_future_operati
     assert today_response.json() == {
         "operational_date": operational_date.isoformat(),
         "timezone": "Europe/London",
-        "starts_at": starts_at.isoformat(),
-        "ends_at": ends_at.isoformat(),
+        "starts_at": utc_seconds_isoformat(starts_at),
+        "ends_at": utc_seconds_isoformat(ends_at),
         "lines": {line_id: [] for line_id in sorted(SUPPORTED_LINE_IDS)},
     }
     assert future_response.status_code == 422

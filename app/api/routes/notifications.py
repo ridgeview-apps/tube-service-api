@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.security import require_api_key
@@ -19,12 +19,14 @@ from app.notifications.repository import (
     enable_device,
     get_device,
     get_preferences,
+    patch_preferences,
     upsert_device,
     upsert_preferences,
 )
 from app.notifications.schemas import (
     NotificationDeviceRead,
     NotificationDeviceRegistration,
+    NotificationPreferencesPatch,
     NotificationPreferencesRead,
     NotificationPreferencesUpdate,
     NotificationTestPushRead,
@@ -42,6 +44,41 @@ router = APIRouter(
     tags=["notifications"],
     dependencies=[Depends(require_api_key)],
 )
+
+PATCH_PREFERENCES_EXAMPLES = {
+    "update-and-remove": {
+        "summary": "Update one line and remove another",
+        "value": {
+            "lines": {
+                "victoria": {"enabled": False},
+                "central": None,
+            }
+        },
+    },
+    "add-line": {
+        "summary": "Add a fully specified line",
+        "value": {
+            "lines": {
+                "victoria": {
+                    "enabled": True,
+                    "severity_threshold": "minor_delays",
+                    "notify_recoveries": True,
+                    "schedules": [
+                        {
+                            "days": ["mon", "tue", "wed", "thu", "fri"],
+                            "windows": [
+                                {
+                                    "start_time": "06:30",
+                                    "end_time": "09:30",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            }
+        },
+    },
+}
 
 
 def get_push_sender(
@@ -80,6 +117,44 @@ async def update_notification_preferences(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> NotificationPreferences:
     preferences = await upsert_preferences(session, device_id, update)
+    if preferences is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification device not found",
+        )
+    return preferences
+
+
+@router.patch(
+    "/{device_id}/preferences",
+    response_model=NotificationPreferencesRead,
+    openapi_extra={
+        "requestBody": {
+            "content": {"application/merge-patch+json": {"examples": PATCH_PREFERENCES_EXAMPLES}}
+        }
+    },
+)
+async def patch_notification_preferences(
+    device_id: str,
+    patch: Annotated[
+        NotificationPreferencesPatch,
+        Body(
+            media_type="application/merge-patch+json",
+            description=(
+                "Only listed lines and fields change. Use null to remove a line; "
+                "a new line must include every preference field."
+            ),
+        ),
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> NotificationPreferences:
+    try:
+        preferences = await patch_preferences(session, device_id, patch)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
     if preferences is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
