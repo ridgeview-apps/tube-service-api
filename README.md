@@ -50,23 +50,21 @@ Start the API:
 uv run uvicorn app.main:app --reload
 ```
 
-All `/v1/line-status/*` endpoints require a configured client key in an
-`X-API-Key` request header. Each client has an ID and one or more active random
-secrets. Configure them as JSON:
+All `/v1/line-status/*` endpoints require a configured API key in an
+`X-API-Key` request header. Configure one or more active random keys as JSON:
 
 ```env
-CLIENT_API_KEYS={"ios":["64-character-generated-secret"],"widget":["64-character-generated-secret"]}
+CLIENT_API_KEYS=["64-character-generated-secret"]
 ```
 
-Generate each client secret separately:
+Generate each key separately:
 
 ```bash
 openssl rand -hex 32
 ```
 
-Clients send the ID and generated secret joined by a dot, such as
-`ios.<generated-secret>`. Multiple secrets can temporarily be configured for
-one client during rotation. The `/health` endpoint remains public, and
+Clients send the generated key directly in the header. Multiple keys can be
+temporarily configured during rotation. The `/health` endpoint remains public, and
 production traffic must use HTTPS so keys are encrypted in transit.
 
 When `APP_ENV=development`, authentication is disabled if `CLIENT_API_KEYS` is
@@ -280,7 +278,7 @@ API service:
 ```env
 APP_ENV=production
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DATABASE
-CLIENT_API_KEYS={"ios":["generated-production-secret"]}
+CLIENT_API_KEYS=["generated-production-secret"]
 APNS_TEST_PUSH_ENABLED=false
 ```
 

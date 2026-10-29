@@ -29,7 +29,7 @@ api_key="${TUBE_API_KEY:-}"
 device_id="${TUBE_DEVICE_ID:-}"
 
 if [[ -z "$api_key" ]]; then
-  read -r -s -p 'Full API key (for example ios.<secret>): ' api_key
+  read -r -s -p 'API key: ' api_key
   printf '\n'
 fi
 
