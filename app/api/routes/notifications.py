@@ -70,6 +70,7 @@ PATCH_PREFERENCES_EXAMPLES = {
     },
 }
 
+
 @router.put("/{device_id}", response_model=NotificationDeviceRead)
 async def register_notification_device(
     device_id: str,
