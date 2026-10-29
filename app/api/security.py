@@ -22,20 +22,18 @@ async def require_api_key(
             detail="API authentication is not configured",
         )
 
-    if provided_api_key is None or "." not in provided_api_key:
+    if provided_api_key is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
         )
 
-    client_id, provided_secret = provided_api_key.split(".", maxsplit=1)
-    configured_secrets = configured_api_keys.get(client_id, [])
     if not any(
         compare_digest(
-            provided_secret.encode(),
-            configured_secret.get_secret_value().encode(),
+            provided_api_key.encode(),
+            configured_api_key.get_secret_value().encode(),
         )
-        for configured_secret in configured_secrets
+        for configured_api_key in configured_api_keys
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
