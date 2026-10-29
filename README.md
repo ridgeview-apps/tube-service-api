@@ -329,6 +329,9 @@ Railway deploy settings:
 
 - Enable auto-deploys from GitHub.
 - Enable **Wait for CI** on the API and snapshot worker services.
+- Configure the API service healthcheck path as `/ready` so Railway only routes
+  traffic after the API can reach PostgreSQL. Keep `/health` for lightweight
+  liveness checks.
 - Run migrations before deployment with:
 
 ```bash
