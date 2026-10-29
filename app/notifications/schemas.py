@@ -243,6 +243,7 @@ class NotificationPreferencesRead(NotificationPreferencesBase):
 
 
 class NotificationTestPushRead(BaseModel):
+    delivery_id: int
     device_id: str
     status: str
     provider_message_id: str | None = None

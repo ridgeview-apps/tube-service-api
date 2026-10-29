@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
@@ -7,18 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.security import require_api_key
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.notifications.models import (
-    NotificationDelivery,
-    NotificationDevice,
-    NotificationEvent,
-    NotificationPreferences,
-)
+from app.notifications.models import NotificationDevice, NotificationPreferences
 from app.notifications.repository import (
+    create_test_delivery,
     delete_device,
     disable_device,
     enable_device,
     get_device,
     get_preferences,
+    get_test_delivery,
     patch_preferences,
     upsert_device,
     upsert_preferences,
@@ -31,12 +27,6 @@ from app.notifications.schemas import (
     NotificationPreferencesUpdate,
     NotificationTestPushRead,
     PushPlatform,
-)
-from app.notifications.sender import (
-    NoopPushSender,
-    PushSender,
-    PushSendStatus,
-    build_configured_push_sender,
 )
 
 router = APIRouter(
@@ -79,13 +69,6 @@ PATCH_PREFERENCES_EXAMPLES = {
         },
     },
 }
-
-
-def get_push_sender(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> PushSender:
-    return build_configured_push_sender(settings)
-
 
 @router.put("/{device_id}", response_model=NotificationDeviceRead)
 async def register_notification_device(
@@ -205,24 +188,21 @@ async def delete_notification_device(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{device_id}/test-push", response_model=NotificationTestPushRead)
+@router.post(
+    "/{device_id}/test-push",
+    response_model=NotificationTestPushRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def send_test_push_notification(
     device_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-    sender: Annotated[PushSender, Depends(get_push_sender)],
 ) -> NotificationTestPushRead:
     if not settings.apns_test_push_enabled:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test push endpoint is not enabled",
         )
-    if isinstance(sender, NoopPushSender):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="APNs is not configured",
-        )
-
     device = await get_device(session, device_id)
     if device is None:
         raise HTTPException(
@@ -235,41 +215,48 @@ async def send_test_push_notification(
             detail="Test push is only supported for iOS devices",
         )
 
-    observed_at = datetime.now(UTC)
-    result = await sender.send(
-        delivery=NotificationDelivery(
-            id=0,
-            event_id=0,
-            device_id=device.device_id,
-            platform=device.platform,
-            push_token=device.push_token,
-            app_variant=device.app_variant,
-            status="test",
-            created_at=observed_at,
-            updated_at=observed_at,
-        ),
-        event=NotificationEvent(
-            id=0,
-            dedupe_key=f"test:{device.device_id}:{int(observed_at.timestamp())}",
-            line_id="test",
-            event_type="test",
-            observed_at=observed_at,
-            severity=0,
-            status_description="Test notification",
-            reason=None,
-            created_at=observed_at,
-        ),
+    delivery = await create_test_delivery(session, device)
+
+    return NotificationTestPushRead(
+        delivery_id=delivery.id,
+        device_id=device.device_id,
+        status=delivery.status,
+        provider_message_id=delivery.provider_message_id,
+        failure_reason=delivery.failure_reason,
     )
 
-    if result.status == PushSendStatus.SKIPPED:
+
+@router.get(
+    "/{device_id}/test-push/{delivery_id}",
+    response_model=NotificationTestPushRead,
+)
+async def read_test_push_notification(
+    device_id: str,
+    delivery_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> NotificationTestPushRead:
+    if not settings.apns_test_push_enabled:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=result.failure_reason or "Test push was skipped",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test push endpoint is not enabled",
+        )
+
+    delivery = await get_test_delivery(
+        session,
+        device_id=device_id,
+        delivery_id=delivery_id,
+    )
+    if delivery is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test push delivery not found",
         )
 
     return NotificationTestPushRead(
-        device_id=device.device_id,
-        status=result.status.value,
-        provider_message_id=result.provider_message_id,
-        failure_reason=result.failure_reason,
+        delivery_id=delivery.id,
+        device_id=delivery.device_id,
+        status=delivery.status,
+        provider_message_id=delivery.provider_message_id,
+        failure_reason=delivery.failure_reason,
     )

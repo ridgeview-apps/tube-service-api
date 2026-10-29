@@ -124,7 +124,9 @@ and register the device with `"app_variant": "development"`.
 `APNS_PRIVATE_KEY` accepts escaped newlines. Do not commit APNs keys, push
 tokens, or provider secrets.
 
-A gated test endpoint can send a push to any known iOS notification device:
+A gated test endpoint queues a push to any known iOS notification device. The
+notification delivery worker sends it, so APNs credentials remain on that worker
+and are not needed by the API service:
 
 ```bash
 curl \
@@ -133,8 +135,10 @@ curl \
   "http://127.0.0.1:8000/v1/notification-devices/install-123/test-push"
 ```
 
-The endpoint returns 404 unless `APNS_TEST_PUSH_ENABLED=true`; it still requires
-the normal API key.
+The endpoint returns `202 Accepted` with a delivery ID. Poll the delivery status
+at `GET /v1/notification-devices/{device_id}/test-push/{delivery_id}` until it is
+`sent`, `failed`, or `skipped`. Both endpoints return 404 unless
+`APNS_TEST_PUSH_ENABLED=true`; they still require the normal API key.
 
 Check the latest worker runs:
 
