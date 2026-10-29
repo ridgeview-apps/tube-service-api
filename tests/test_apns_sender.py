@@ -261,7 +261,7 @@ async def test_apns_sender_skips_non_ios_delivery() -> None:
 
 
 def test_configured_sender_uses_noop_when_apns_config_is_missing() -> None:
-    sender = build_configured_push_sender(Settings())
+    sender = build_configured_push_sender(Settings(apns_private_key=None))
 
     assert isinstance(sender, NoopPushSender)
 

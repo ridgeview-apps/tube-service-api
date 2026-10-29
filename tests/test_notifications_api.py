@@ -4,13 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.api.routes.notifications import get_push_sender
 from app.api.security import require_api_key
 from app.config import Settings, get_settings
 from app.database import Base, get_session
 from app.main import app
-from app.notifications.models import NotificationDevice
-from app.notifications.sender import PushSendResult, PushSendStatus
+from app.notifications.models import NotificationDelivery, NotificationDevice, NotificationEvent
 
 test_engine = create_async_engine(
     "sqlite+aiosqlite://",
@@ -26,20 +24,6 @@ async def get_test_session():
 
 async def bypass_api_key() -> None:
     pass
-
-
-class FakePushSender:
-    def __init__(self) -> None:
-        self.delivery_device_ids: list[str] = []
-        self.event_types: list[str] = []
-
-    async def send(self, *, delivery, event) -> PushSendResult:
-        self.delivery_device_ids.append(delivery.device_id)
-        self.event_types.append(event.event_type)
-        return PushSendResult(
-            status=PushSendStatus.SENT,
-            provider_message_id="test-apns-id",
-        )
 
 
 @pytest.fixture(autouse=True)
@@ -698,10 +682,8 @@ async def test_test_push_endpoint_is_gated_by_setting() -> None:
     assert response.status_code == 404
 
 
-async def test_sends_test_push_to_known_ios_device() -> None:
-    fake_sender = FakePushSender()
+async def test_queues_test_push_for_known_ios_device() -> None:
     app.dependency_overrides[get_settings] = lambda: Settings(apns_test_push_enabled=True)
-    app.dependency_overrides[get_push_sender] = lambda: fake_sender
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -713,12 +695,48 @@ async def test_sends_test_push_to_known_ios_device() -> None:
         )
         response = await client.post("/v1/notification-devices/install-123/test-push")
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert response.status_code == 202
+    response_body = response.json()
+    assert response_body == {
+        "delivery_id": response_body["delivery_id"],
         "device_id": "install-123",
-        "status": "sent",
-        "provider_message_id": "test-apns-id",
+        "status": "pending",
+        "provider_message_id": None,
         "failure_reason": None,
     }
-    assert fake_sender.delivery_device_ids == ["install-123"]
-    assert fake_sender.event_types == ["test"]
+
+    async with db_session_factory() as session:
+        delivery = await session.get(NotificationDelivery, response_body["delivery_id"])
+        assert delivery is not None
+        assert delivery.device_id == "install-123"
+        assert delivery.status == "pending"
+        event = await session.get(NotificationEvent, delivery.event_id)
+        assert event is not None
+        assert event.event_type == "test"
+
+
+async def test_reads_queued_test_push_status() -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(apns_test_push_enabled=True)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        queued_response = await client.post("/v1/notification-devices/install-123/test-push")
+        delivery_id = queued_response.json()["delivery_id"]
+        status_response = await client.get(
+            f"/v1/notification-devices/install-123/test-push/{delivery_id}"
+        )
+
+    assert status_response.status_code == 200
+    assert status_response.json() == {
+        "delivery_id": delivery_id,
+        "device_id": "install-123",
+        "status": "pending",
+        "provider_message_id": None,
+        "failure_reason": None,
+    }

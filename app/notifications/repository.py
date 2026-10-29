@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -328,6 +329,58 @@ async def create_pending_deliveries(
     for delivery in deliveries:
         await session.refresh(delivery)
     return deliveries
+
+
+async def create_test_delivery(
+    session: AsyncSession,
+    device: NotificationDevice,
+) -> NotificationDelivery:
+    """Queue one test notification for delivery by the notification worker."""
+    now = utc_now()
+    event = NotificationEvent(
+        dedupe_key=f"test:{uuid4().hex}",
+        line_id="test",
+        event_type="test",
+        observed_at=now,
+        severity=0,
+        status_description="Test notification",
+        reason=None,
+        created_at=now,
+    )
+    delivery = NotificationDelivery(
+        event=event,
+        device_id=device.device_id,
+        platform=device.platform,
+        push_token=device.push_token,
+        app_variant=device.app_variant,
+        status=PENDING_DELIVERY_STATUS,
+        provider_message_id=None,
+        failure_reason=None,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(delivery)
+    await session.commit()
+    await session.refresh(delivery)
+    return delivery
+
+
+async def get_test_delivery(
+    session: AsyncSession,
+    *,
+    device_id: str,
+    delivery_id: int,
+) -> NotificationDelivery | None:
+    statement = (
+        select(NotificationDelivery)
+        .join(NotificationDelivery.event)
+        .where(
+            NotificationDelivery.id == delivery_id,
+            NotificationDelivery.device_id == device_id,
+            NotificationEvent.event_type == "test",
+        )
+    )
+    return await session.scalar(statement)
 
 
 async def get_device_ids_notified_of_active_disruption(
