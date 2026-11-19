@@ -106,6 +106,12 @@ class NotificationSchedule(BaseModel):
             raise ValueError("all_day schedules cannot include windows")
         if not self.all_day and not self.windows:
             raise ValueError("Schedules must be all_day or include at least one window")
+        latest_end: time | None = None
+        for window in sorted(self.windows, key=lambda window: window.start_time):
+            if latest_end is not None and window.start_time < latest_end:
+                raise ValueError("Schedule windows must not overlap")
+            if latest_end is None or window.end_time > latest_end:
+                latest_end = window.end_time
         return self
 
 
