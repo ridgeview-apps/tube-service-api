@@ -370,6 +370,77 @@ async def test_preferences_rejects_timed_schedules_without_windows() -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "windows",
+    [
+        [
+            {"start_time": "07:00", "end_time": "09:00"},
+            {"start_time": "08:00", "end_time": "10:00"},
+        ],
+        [
+            {"start_time": "07:00", "end_time": "09:00"},
+            {"start_time": "07:00", "end_time": "09:00"},
+        ],
+    ],
+)
+async def test_preferences_rejects_overlapping_schedule_windows(
+    windows: list[dict[str, str]],
+) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={
+                "lines": [
+                    {
+                        "line_id": "victoria",
+                        "schedules": [{"days": ["mon"], "windows": windows}],
+                    }
+                ]
+            },
+        )
+
+    assert response.status_code == 422
+
+
+async def test_preferences_accepts_adjacent_schedule_windows() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        await client.put(
+            "/v1/notification-devices/install-123",
+            json={"platform": "ios", "push_token": "push-token"},
+        )
+        response = await client.put(
+            "/v1/notification-devices/install-123/preferences",
+            json={
+                "lines": [
+                    {
+                        "line_id": "victoria",
+                        "schedules": [
+                            {
+                                "days": ["mon"],
+                                "windows": [
+                                    {"start_time": "07:00", "end_time": "09:00"},
+                                    {"start_time": "09:00", "end_time": "10:00"},
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+
+    assert response.status_code == 200
+
+
 async def test_rejects_unsupported_line_ids() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app),
